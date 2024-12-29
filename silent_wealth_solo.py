@@ -103,7 +103,13 @@ def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
         btc_quantity = cash / btc_price
         btc_quantity = round(btc_quantity, 8)
         #order = MarketOrder('BUY', btc_quantity)
-        order = MarketOrder('BUY', btc_quantity)
+        #order.cashQty = cash
+
+        order = LimitOrder(
+            action='BUY',  # 'BUY' to purchase BTC
+            totalQuantity=btc_quantity,  # Specify the calculated BTC quantity
+            lmtPrice=0  # Set limit price to 0 (market-like)
+        )
         order.cashQty = cash
         order.tif = 'IOC'
         trade = ib_input.placeOrder(stock_input, order)
