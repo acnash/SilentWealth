@@ -94,7 +94,50 @@ def sell_market_order(ib_input, symbol, quantity_input, stock_input):
         #     print("Market price not available.")
 
 def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
-    pass
+    # This is for Bitcoin
+    # order = MarketOrder('BUY', 0)
+    print("Hi")
+    global holding_stock
+    global global_buy_price
+    global global_ema20
+    global global_first_adjustment
+    global global_previous_ema
+
+    if not holding_stock:
+        share_ticker = ib_input.reqMktData(stock_input, '', False, False)
+        ib_input.sleep(2)
+        bid_price = share_ticker.bid
+        print(f"...Placing limit order of {quantity_input} of BTC at {bid_price} per share")
+        order = LimitOrder('BUY', quantity_input, bid_price)
+        order.cashQty = cash
+        order.tif = 'IOC'
+        trade = ib_input.placeOrder(stock_input, order)
+        holding_stock = True
+
+        while not trade.isDone():
+            ib_input.waitOnUpdate()
+
+        if trade.fills:
+            fill_price = trade.fills[0].execution.price
+            print(f"Trade filled at {fill_price} price per share")
+            stop_loss_offset = 1.000 - stop_loss_percent
+            stop_loss_price = round(fill_price * stop_loss_offset, 3)
+            print(f"Stop-loss price set at {stop_loss_price:.3f}")
+            stop_order = StopOrder('SELL', quantity_input, stop_loss_price)
+    else:
+        if global_ema20 > global_buy_price and global_first_adjustment:
+            print(
+                f"EMA20 {global_ema20} > original buy price. Adjusting stop loss to {global_ema20} to track the curve and avoid losses.")
+            stop_order = StopOrder('SELL', quantity_input, global_ema20)
+            trade = ib_input.placeOrder(stock_input, stop_order)
+            global_previous_ema = global_ema20
+            global_first_adjustment = False
+        elif not global_first_adjustment and global_ema20 > global_previous_ema:
+            print(
+                f"EMA20 {global_ema20} > previous EMA20 {global_previous_ema}. Adjusting stop loss to {global_ema20} to track the curve and avoid losses.")
+            stop_order = StopOrder('SELL', quantity_input, global_ema20)
+            trade = ib_input.placeOrder(stock_input, stop_order)
+            global_previous_ema = global_ema20
 
 def sell_market_BTC_order(ib_input, stock_input):
     pass
