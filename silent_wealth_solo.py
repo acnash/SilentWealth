@@ -13,13 +13,17 @@ from volume_weighted_average import VolumeWeightedAverage
 PAPER_PORT = 7497
 LIVE_PORT = 7496
 
-LSE_START_TIME = "08:30"
-LSE_END_TIME = "15:30"
-LSE_CLOSE_TIME = "15:58"
+LSE_START_TIME = "08:10"
+LSE_END_TIME = "16:00"
+LSE_CLOSE_TIME = "16:10"
 
 NYSE_START_TIME = "14:10"
 NYSE_END_TIME = "20:30"
 NYSE_CLOSE_TIME = "20:58"
+
+BTC_PAXOS_START_TIME = "08:10"
+BTC_PAXOS_END_TIME = "20:00"
+BTC_PAXOS_CLOSE_TIME = "20:30"
 
 HOLD = "hold"
 BUY = "buy"
@@ -30,10 +34,6 @@ global_buy_price = None
 global_ema20 = None
 global_first_adjustment = True
 global_previous_ema = None
-
-#number_shares = 0
-
-
 
 def sell_market_order(ib_input, symbol, quantity_input, stock_input):
     # sell here...
@@ -96,7 +96,6 @@ def sell_market_order(ib_input, symbol, quantity_input, stock_input):
 def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
     # This is for Bitcoin
     # order = MarketOrder('BUY', 0)
-    print("Hi")
     global holding_stock
     global global_buy_price
     global global_ema20
@@ -189,14 +188,12 @@ def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_
             print("ERROR: trade not filled. Please check the Trader Workstation.")
 
 
+#def silent_wealth_start(ib_input, stock_input, frame_size, stock_name):
+#    # For the first trade the holding list is empty
+#    return decision_maker(ib_input, stock_input, frame_size, stock_name)
+
 
 def silent_wealth_start(ib_input, stock_input, frame_size, stock_name):
-    # For the first trade the holding list is empty
-    decision = decision_maker(ib_input, stock_input, frame_size, stock_name)
-    return decision
-
-
-def decision_maker(ib_input, stock_input, frame_size, stock_name):
     global global_ema20
     ema = ExpMovingAverage(ib_input, stock_input, frame_size, stock_name)
     df_9 = ema.calculate_exp_moving_average(9)
@@ -212,107 +209,105 @@ def decision_maker(ib_input, stock_input, frame_size, stock_name):
     vwap = df_vwap["rolling_vwap"].iloc[-1]
     date_of_action = df_9["date"].iloc[-1]
 
-    print(f"{date_of_action} -- ema9: {ma9:.3f}  ema20: {ma20:.3f}  ema200: {ma200:.3f}  vwap (9 days): {vwap:.3f}")
-    # The conditions are good and I don't have the security - buy it
     if pd.isna(vwap):
         if ma9 > ma20 and ma9 > ma200:
+            print(f"BUY - {date_of_action} -- ema9: {ma9:.3f}  ema20: {ma20:.3f}  ema200: {ma200:.3f}")
             return BUY
         elif ma9 <= ma20:
+            print(f"SELL - {date_of_action} -- ema9: {ma9:.3f}  ema20: {ma20:.3f}  ema200: {ma200:.3f}")
             return SELL
         else:
+            print(f"HOLD - {date_of_action} -- ema9: {ma9:.3f}  ema20: {ma20:.3f}  ema200: {ma200:.3f}")
             return HOLD
     else:
         if ma9 > ma20 and ma9 > ma200 and ma9 > vwap:
+            print(f"BUY - {date_of_action} -- ema9: {ma9:.3f}  ema20: {ma20:.3f}  ema200: {ma200:.3f}  vwap (9 days): {vwap:.3f}")
             return BUY
         elif ma9 <= ma20:
+            print(f"SELL - {date_of_action} -- ema9: {ma9:.3f}  ema20: {ma20:.3f}  ema200: {ma200:.3f}  vwap (9 days): {vwap:.3f}")
             return SELL
         else:
+            print(f"HOLD - {date_of_action} -- ema9: {ma9:.3f}  ema20: {ma20:.3f}  ema200: {ma200:.3f}  vwap (9 days): {vwap:.3f}")
             return HOLD
 
 
 # Define a wrapper function to execute only within the desired hours
-def scheduled_task(ib_input, stock_input, ticker_name_input, quantity_input, frame_size, stop_loss_percent, dollar_amount, trade_time):
+def scheduled_task(ib_input,
+                   stock_input,
+                   ticker_name_input,
+                   quantity_input,
+                   frame_size,
+                   stop_loss_percent,
+                   dollar_amount,
+                   start_time,
+                   stop_time,
+                   close_time):
     global holding_stock
     current_time = datetime.now().time()
 
-    # bitcoin is 24/7
-    if ticker_name_input == "BTC":
+    start_process = False
+    if current_time >= datetime.strptime(start_time, "%H:%M").time() and \
+            current_time <= datetime.strptime(stop_time, "%H:%M").time():
+        start_process = True
+
+    if start_process:
         action = silent_wealth_start(ib_input, stock_input, frame_size, ticker_name_input)
+
         if action == HOLD:
             pass
         elif action == SELL:
             sell_market_order(ib_input, ticker_name_input, quantity_input, stock_input)
         elif action == BUY:
-            place_market_BTC_order(ib_input, stock_input, quantity_input, dollar_amount)
-    else:
-        start_process = False
-        if trade_time == "US":
-            if current_time >= datetime.strptime(NYSE_START_TIME, "%H:%M").time() and \
-                    current_time <= datetime.strptime(NYSE_END_TIME, "%H:%M").time():
-                start_process = True
-        else:
-            if current_time >= datetime.strptime(LSE_START_TIME, "%H:%M").time() and \
-                    current_time <= datetime.strptime(LSE_END_TIME, "%H:%M").time():
-                start_process = True
-
-        if start_process:
-            action = silent_wealth_start(ib_input, stock_input, frame_size, ticker_name_input)
-
-            if action == HOLD:
-                pass
-            elif action == SELL:
-                sell_market_order(ib_input, ticker_name_input, quantity_input, stock_input)
-            elif action == BUY:
-                place_market_order(ib_input, stock_input, quantity_input, ticker_name_input, stop_loss_percent)
-        else:
-            # outside of trading hours for regular stock
-            close_down_trades = False
-            if trade_time == "US":
-                if current_time > datetime.strptime(NYSE_END_TIME, "%H:%M").time() and \
-                        current_time <= datetime.strptime(NYSE_CLOSE_TIME, "%H:%M").time():
-                    close_down_trades = True
+            if ticker_name_input == "BTC":
+                place_market_BTC_order(ib_input, stock_input, quantity_input, dollar_amount)
             else:
-                if current_time > datetime.strptime(LSE_END_TIME, "%H:%M").time() and \
-                        current_time <= datetime.strptime(LSE_CLOSE_TIME, "%H:%M").time():
-                    close_down_trades = True
-            if close_down_trades:
+                place_market_order(ib_input, stock_input, quantity_input, ticker_name_input, stop_loss_percent)
+    else:
+        # outside of trading hours for regular stock
+        close_down_trades = False
+        if current_time > datetime.strptime(stop_time, "%H:%M").time() and \
+                current_time <= datetime.strptime(close_time, "%H:%M").time():
+            close_down_trades = True
 
-                positions = ib_input.positions()
-                position = next((p for p in positions if p.contract.symbol == ticker_name_input), None)
-                if position:
-                    quantity_to_sell = position.position
-                    print(f"Market nearing a close. Selling outstanding {quantity_to_sell} in {ticker_name_input}")
-                    # Create a market order to sell all shares
-                    sell_order = MarketOrder('SELL', quantity_to_sell)
-                    # Place the order to sell the shares
-                    ib_input.placeOrder(stock, sell_order)
-                    exit()
+        if close_down_trades:
+
+            positions = ib_input.positions()
+            position = next((p for p in positions if p.contract.symbol == ticker_name_input), None)
+            if position:
+                quantity_to_sell = position.position
+                print(f"Market nearing a close. Selling outstanding {quantity_to_sell} in {ticker_name_input}")
+                # Create a market order to sell all shares
+                sell_order = MarketOrder('SELL', quantity_to_sell)
+                # Place the order to sell the shares
+                ib_input.placeOrder(stock, sell_order)
+                exit()
 
 
-# --ticker_name BP. --exchange LSE --quantity 100
+#=======================================================================================================================
 parser = argparse.ArgumentParser(description="Silent Wealth")
-
-# Add arguments
-parser.add_argument("--ticker_name", type=str, help="Ticker name e.g., BP. SOXL SOXS, and BTC for Bitcoin", required=True)
-parser.add_argument("--exchange", type=str, help="Exchange e.g., LSE LSEETF ARCA. Not required for Bitcoin.", required=False)
-parser.add_argument("--currency", type=str, help="Currency for trade e.g., USD, GBP.", required=True)
-parser.add_argument("--quantity", type=int, help="The number of shares to buy/sell", required=False)
-parser.add_argument("--frame_size", type=int, help="Minute candle size e.g., 1, 5, or 10", required=True)
-parser.add_argument("--account", type=str, help="Account type e.g., paper or live", required=True)
-parser.add_argument("--stop_loss_percent", type=float, help="The percent below the buy position to take as a stop-loss", required=True)
-parser.add_argument("--dollar_amount", type=int, help="Amount of bitcoin to buy in dollars", required=False)
-parser.add_argument('--time', choices=['US', 'UK'], required=True, help='Specify the region (US or UK).')
+parser.add_argument("--ticker_name", type=str,
+                    help="Ticker name e.g., BP. SOXL SOXS, and BTC for Bitcoin", required=True)
+parser.add_argument("--exchange", type=str,
+                    help="Exchange e.g., LSE LSEETF ARCA. Not required for Bitcoin.", required=False)
+parser.add_argument("--quantity", type=int,
+                    help="The number of shares to buy/sell", required=False)
+parser.add_argument("--frame_size", type=int,
+                    help="Minute candle size e.g., 1, 5, or 10", required=True)
+parser.add_argument("--account", type=str,
+                    help="Account type e.g., paper or live", required=True)
+parser.add_argument("--stop_loss_percent", type=float,
+                    help="The percent below the buy position to take as a stop-loss", required=False)
+parser.add_argument("--dollar_amount", type=int,
+                    help="Amount of bitcoin to buy in dollars", required=False)
 args = parser.parse_args()
 
 ticker_name = args.ticker_name
 exchange = args.exchange
-currency = args.currency
 quantity = args.quantity
 frame_size = args.frame_size
 account = args.account.lower()
 stop_loss_percent = args.stop_loss_percent
 dollar_amount = args.dollar_amount
-trade_time = args.time.upper()
 
 client_id = random.randint(1, 9999)
 ib = IB()
@@ -325,53 +320,60 @@ else:
 
 if ticker_name == "BTC":
     stock = Crypto('BTC', 'PAXOS', 'USD')
-    ib.qualifyContracts(stock)
-    ib.reqMktData(stock)
-    ib.sleep(2)
-    ticker = ib.ticker(stock)
-
-    market_price = None
-    if ticker.last:
-        market_price = ticker.last
-    elif ticker.close:
-        market_price = ticker.close
-    else:
-        print("Cannot determine market price. Possible connection issue.")
-        ib.disconnect()
-        exit()
 else:
     stock = Stock(symbol=ticker_name, exchange=exchange, currency=currency)
-    ib.reqMktData(stock)
-    ib.sleep(2)
-    ticker = ib.ticker(stock)
+ib.qualifyContracts(stock)
+ib.reqMktData(stock)
+ib.sleep(2)
+ticker = ib.ticker(stock)
 
-    market_price = None
-    if ticker.last:
-        market_price = ticker.last
-    elif ticker.close:
-        market_price = ticker.close
-    else:
-        print("Cannot determine market price. Possible connection issue.")
-        ib.disconnect()
-        exit()
-
+market_price = None
+if ticker.last:
+    market_price = ticker.last
+elif ticker.close:
+    market_price = ticker.close
+else:
+    print("Cannot determine market price. Possible connection issue.")
+    ib.disconnect()
+    exit()
 
 print("---------Silent Wealth------------")
 print(f"Ticker nane: {ticker_name}")
 print(f"Market price: {market_price}")
-print(f"Exchange: {exchange}")
-print(f"Currency: {currency}")
-print(f"Quantity: {quantity}")
 print(f"Frame size (minutes): {frame_size}")
 print(f"Client ID: {client_id}")
-print(f"Account type: {account}")
-print(f"BTC Dollar amount: {dollar_amount}")
-if trade_time == "US":
-    print(f"Start time: {NYSE_START_TIME} (UK time)")
-    print(f"Stop time: {NYSE_END_TIME} (UK time)\n")
+
+if exchange:
+    print(f"Exchange: {exchange}")
+    print(f"Quantity: {quantity}")
+    if ["LSE"] in exchange:
+        start_time = LSE_START_TIME
+        stop_time = LSE_END_TIME
+        close_time = LSE_CLOSE_TIME
+        currency = "GBP"
+    elif ["NASDAQ", "ARCA"] in exchange:
+        start_time = NYSE_START_TIME
+        stop_time = NYSE_END_TIME
+        close_time = NYSE_CLOSE_TIME
+        currency = "USD"
+    else:
+        print("Failed to establish trading time.")
+        ib.disconnect()
+        exit()
+elif ticker_name == "BTC":
+    currency = "USD"
+    start_time = BTC_PAXOS_START_TIME
+    stop_time = BTC_PAXOS_END_TIME
+    close_time = BTC_PAXOS_CLOSE_TIME
+    print(f"BTC Dollar amount: {dollar_amount}")
 else:
-    print(f"Start time: {LSE_START_TIME}")
-    print(f"Stop time: {LSE_END_TIME}\n")
+    print("Failed to establish trading time.")
+    ib.disconnect()
+    exit()
+
+print(f"Currency: {currency}")
+print(f"Account type: {account}")
+
 
 schedule.every(frame_size).minutes.do(scheduled_task,
                                       ib,
@@ -381,7 +383,9 @@ schedule.every(frame_size).minutes.do(scheduled_task,
                                       frame_size,
                                       stop_loss_percent,
                                       dollar_amount,
-                                      trade_time)
+                                      start_time,
+                                      stop_time,
+                                      close_time)
 
 # Keep the scheduler running
 print(f"Starting run... {ticker_name}")
@@ -390,7 +394,16 @@ try:
     while True:
         if first_time:
             first_time = False
-            scheduled_task(ib, stock, ticker_name, quantity, frame_size, stop_loss_percent, dollar_amount, trade_time)
+            scheduled_task(ib,
+                           stock,
+                           ticker_name,
+                           quantity,
+                           frame_size,
+                           stop_loss_percent,
+                           dollar_amount,
+                           start_time,
+                           stop_time,
+                           close_time)
         else:
             schedule.run_pending()
             time.sleep(1)  # Sleep to prevent CPU overuse
