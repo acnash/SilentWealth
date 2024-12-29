@@ -42,60 +42,53 @@ def sell_market_order(ib_input, symbol, quantity_input, stock_input):
     if not holding_stock:
         return
     else:
-        #print("...Selling")
-        #positions = ib_input.positions()
-        #position = next((p for p in positions if p.contract.symbol == symbol), None)
-
-        #quantity_to_sell = position.position
         print(f"...Selling {quantity_input} of {symbol}")
-
-        # Create a market order to sell all shares
         sell_order = MarketOrder('SELL', quantity_input)
-
-        # Place the order to sell the shares
         trade = ib_input.placeOrder(stock, sell_order)
         holding_stock = False
 
-        # # Wait for the order to fill
-        # while not trade.isDone():
-        #     ib_input.waitOnUpdate()
-        #
-        # commission = 0
-        # # Retrieve execution details
-        # for execDetail in trade.fills:
-        #     print(f"Execution: {execDetail.execution}")
-        #
-        #     # Retrieve commission report
-        #     commissionReport = execDetail.commissionReport
-        #     #print(f"Commission Report: {commissionReport}")
-        #     #print(f"Commission Amount: {commissionReport.commission}")
-        #     commission = commission + commissionReport.commission
-        #
-        # print(f"Commission cost: {commissionReport.commission}")
-        # print(f"Accrued commission costs: {commission}")
-        #
-        # # get the trade price (roughly)
-        # ticker = ib_input.reqMktData(stock_input, '', False, False)
-        # ib_input.sleep(2)
-        # #ticker = ib_input.ticker(stock_input)
-        # if ticker.last:
-        #     latest_price = ticker.last
-        # elif ticker.close:
-        #     latest_price = ticker.close  # Fallback to last close price if no live price is available
-        # else:
-        #     latest_price = None
-        #
-        # # Calculate the value of the shares
-        # if latest_price:
-        #     total_value = latest_price * 10  # Multiply by the number of shares
-        #     print(f"Latest market price: ${latest_price}")
-        #     print(f"Value of 10 shares: ${total_value}")
-        # else:
-        #     print("Market price not available.")
+
+def sell_market_BTC_order(ib_input, btc_contract):
+    global holding_stock
+    if not holding_stock:
+        return
+    else:
+        positions = ib_input.positions()
+        # Find the BTC position
+        btc_position = next((pos for pos in positions if pos.contract.symbol == 'BTC'), None)
+
+        if btc_position:
+            btc_quantity = btc_position.position  # Quantity of BTC you hold
+            print(f"You have {btc_quantity} BTC.")
+        else:
+            print("No BTC position found.")
+            return
+
+        #btc_contract = Contract(
+        #    secType='CRYPTO',
+        #    conId=490404295,  # Ensure this is the correct conId for BTC
+        #    symbol='BTC',
+        #    exchange='PAXOS',
+        #    currency='USD'
+        #)
+
+        # Create a market order to sell all BTC
+        if btc_position and btc_quantity > 0:
+            sell_order = MarketOrder(
+                action='SELL',
+                totalQuantity=abs(btc_quantity)  # Ensure quantity is positive
+            )
+            sell_order.tif = "IOC"
+
+            # Place the order
+            trade = ib.placeOrder(btc_contract, sell_order)
+            print(f"Sell order placed: {trade}")
+            holding_stock = False
+        else:
+            print("No BTC to sell or invalid position.")
+
 
 def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
-    # This is for Bitcoin
-    # order = MarketOrder('BUY', 0)
     global holding_stock
     global global_buy_price
     global global_ema20
@@ -256,7 +249,10 @@ def scheduled_task(ib_input,
         if action == HOLD:
             pass
         elif action == SELL:
-            sell_market_order(ib_input, ticker_name_input, quantity_input, stock_input)
+            if ticker_name_input == "BTC":
+                sell_market_BTC_order(ib_input, stock_input)
+            else:
+                sell_market_order(ib_input, ticker_name_input, quantity_input, stock_input)
         elif action == BUY:
             if ticker_name_input == "BTC":
                 place_market_BTC_order(ib_input, stock_input, quantity_input, dollar_amount)
@@ -270,7 +266,6 @@ def scheduled_task(ib_input,
             close_down_trades = True
 
         if close_down_trades:
-
             positions = ib_input.positions()
             position = next((p for p in positions if p.contract.symbol == ticker_name_input), None)
             if position:
