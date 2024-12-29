@@ -56,6 +56,6 @@ class ExpMovingAverage:
             df['date'] = pd.to_datetime(df['date'])
             df = df.sort_values('date')
 
-            df[f"{days}_day_MA"] = df['close'].ewm(span=days, adjust=False, min_periods=days).mean()
+            df[f"{days}_day_EMA"] = df['close'].ewm(span=days, adjust=False, min_periods=days).mean()
 
             return df

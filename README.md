@@ -8,6 +8,14 @@
 - `--account` Set to `paper` or `live`. 
 - `--stop_loss_percent` 0 to 1 as a fraction from the trade value e.g., 0.01 sets a -1% stop loss below the trade value. 
 
+### Adjusting BUY/SELL conditions:
+
+- `--ema_short` short-range exponential moving average (default: 9)
+- `--ema_medium` medium-range exponential moving average (default: 20)
+- `--ema_long` long-range exponential moving average (default: 200). Set to 0 to exclude from BUY conditions.
+- `--vwap` volume-weighted average price (default: 9). Set to 0 to exclude from BUY conditions.
+
+
 ## Examples
 
 Use the following examples and options (provided above) to execute the software.
