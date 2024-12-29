@@ -97,6 +97,7 @@ def sell_market_order(ib_input, symbol, quantity_input, stock_input):
 def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
     # This is for Bitcoin
     # order = MarketOrder('BUY', 0)
+    print("Hi")
     global holding_stock
     global global_buy_price
     global global_ema20
