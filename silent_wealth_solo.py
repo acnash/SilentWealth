@@ -7,6 +7,7 @@ import argparse
 import random
 import pandas as pd
 
+from RSI import RSI
 from exp_moving_average import ExpMovingAverage
 from volume_weighted_average import VolumeWeightedAverage
 
@@ -17,7 +18,7 @@ LSE_START_TIME = "08:10"
 LSE_END_TIME = "16:00"
 LSE_CLOSE_TIME = "16:10"
 
-NYSE_START_TIME = "14:10"
+NYSE_START_TIME = "14:30"
 NYSE_END_TIME = "20:30"
 NYSE_CLOSE_TIME = "20:58"
 
@@ -108,9 +109,9 @@ def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
         order = LimitOrder(
             action='BUY',  # 'BUY' to purchase BTC
             totalQuantity=btc_quantity,  # Specify the calculated BTC quantity
-            lmtPrice=0  # Set limit price to 0 (market-like)
+            lmtPrice=btc_price  # Set limit price to 0 (market-like)
         )
-        order.cashQty = cash
+        #order.cashQty = cash
         order.tif = 'IOC'
         trade = ib_input.placeOrder(stock_input, order)
         print(f"...Placing limit order of {btc_quantity} of BTC at bid price of {btc_price} per share")
@@ -214,7 +215,8 @@ def silent_wealth_start(ib_input,
                         ema_short_input,
                         ema_medium_input,
                         ema_long_input,
-                        vwap_input):
+                        vwap_input,
+                        rsi_period_input):
     global global_ema20
     ema = ExpMovingAverage(ib_input, stock_input, frame_size_input, stock_name)
 
@@ -235,23 +237,31 @@ def silent_wealth_start(ib_input,
     else:
         vwap_value = 0
 
+    if rsi_period_input > 0:
+        rsi_obj = RSI(df_ema_short)
+        rsi_value = rsi_obj.calculate_rsi(rsi_period_input)
+
+
+
     global_ema20 = ema_medium_input
     date_of_action = df_ema_short["date"].iloc[-1]
 
-    if vwap_input == 0 and ema_long_input > 0:
-        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input:
+    if vwap_input == 0 and ema_long_input > 0 and rsi_period_input > 0:
+        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and (rsi_value > 50 and rsi_value <=70):
             print(
-                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
             print(
-                f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+                f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
             return SELL
         else:
             print(
-                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
             return HOLD
-    elif ema_long_input == 0 and vwap_input > 0:
+
+
+    elif ema_long_input == 0 and vwap_input > 0 and rsi_period_input == 0:
         if ema_short_input > ema_medium_input and ema_short_input > vwap_value:
             print(
                 f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}")
@@ -264,7 +274,43 @@ def silent_wealth_start(ib_input,
             print(
                 f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}")
             return HOLD
-    elif ema_long_input == 0 and vwap == 0:
+
+
+    elif ema_long_input > 0 and vwap == 0 and rsi_period_input == 0:
+        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input:
+            print(f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+            return BUY
+        elif ema_short_input <= ema_medium_input:
+            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+            return SELL
+        else:
+            print(f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+            return HOLD
+
+    elif ema_long_input > 0 and vwap > 0 and rsi_period_input == 0:
+        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and ema_short_input > vwap_value:
+            print(f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+            return BUY
+        elif ema_short_input <= ema_medium_input:
+            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+            return SELL
+        else:
+            print(f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+            return HOLD
+
+    elif ema_long_input == 0 and vwap == 0 and rsi_period_input > 0:
+        if ema_short_input > ema_medium_input and (rsi_value > 50 and rsi_value <=70):
+            print(f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
+            return BUY
+        elif ema_short_input <= ema_medium_input:
+            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
+            return SELL
+        else:
+            print(f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
+            return HOLD
+
+
+    elif ema_long_input == 0 and vwap == 0 and rsi_period_input == 0:  # only the short and medium EMA
         if ema_short_input > ema_medium_input:
             print(f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}")
             return BUY
@@ -274,18 +320,33 @@ def silent_wealth_start(ib_input,
         else:
             print(f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}")
             return HOLD
-    else:  # This is for all conditions
-        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and ema_short_input > vwap_value:
+
+    elif ema_long_input == 0 and vwap_input > 0 and rsi_period_input > 0:
+        if ema_short_input > ema_medium_input and ema_short_input > vwap_value and (rsi_value > 50 and rsi_value <=70):
             print(
-                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
             print(
-                f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+                f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return SELL
         else:
             print(
-                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+            return HOLD
+
+
+    else:  # This is for all conditions
+        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and ema_short_input > vwap_value and (rsi_value > 50 and rsi_value <=70):
+            print(
+                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+            return BUY
+        elif ema_short_input <= ema_medium_input:
+            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+            return SELL
+        else:
+            print(
+                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return HOLD
 
 
@@ -303,7 +364,8 @@ def scheduled_task(ib_input,
                    ema_short,
                    ema_medium,
                    ema_long,
-                   vwap):
+                   vwap,
+                   rsi_period):
     global holding_stock
     current_time = datetime.now().time()
 
@@ -320,7 +382,8 @@ def scheduled_task(ib_input,
                                      ema_short,
                                      ema_medium,
                                      ema_long,
-                                     vwap)
+                                     vwap,
+                                     rsi_period)
 
         if action == HOLD:
             pass
@@ -378,6 +441,8 @@ parser.add_argument("--ema_long", type=int, default=200, required=False,
                     help="Units to compute the long-range exponential moving average. Default is 200.")
 parser.add_argument("--vwap", type=int, default=9, required=False,
                     help="Units to compute the volume-weighted average price. Default is 9.")
+parser.add_argument("--rsi_period", type=int, default=14, required=False,
+                    help="Units to compute the RSI. Default is 14.")
 args = parser.parse_args()
 
 ticker_name = args.ticker_name
@@ -391,6 +456,7 @@ ema_short = args.ema_short
 ema_medium = args.ema_medium
 ema_long = args.ema_long
 vwap = args.vwap
+rsi_period = args.rsi_period
 
 client_id = random.randint(1, 9999)
 ib = IB()
@@ -409,12 +475,12 @@ print(f"Client ID: {client_id}")
 if exchange:
     print(f"Exchange: {exchange}")
     print(f"Quantity: {quantity}")
-    if ["LSE"] in exchange:
+    if "LSE" in exchange:
         start_time = LSE_START_TIME
         stop_time = LSE_END_TIME
         close_time = LSE_CLOSE_TIME
         currency = "GBP"
-    elif ["NASDAQ", "ARCA"] in exchange:
+    elif any(ex in exchange for ex in ["NASDAQ", "ARCA"]):
         start_time = NYSE_START_TIME
         stop_time = NYSE_END_TIME
         close_time = NYSE_CLOSE_TIME
@@ -440,7 +506,8 @@ print("BUY/SELL conditions")
 print(f"Short-range moving average: {ema_short}")
 print(f"Medium-range moving average: {ema_medium}")
 print(f"Long-range moving average: {ema_long}")
-print(f"Volume-weighted average price: {vwap}\n")
+print(f"Volume-weighted average price: {vwap}")
+print(f"RSI period: {rsi_period}\n")
 
 if ticker_name == "BTC":
     #stock = Crypto('BTC', 'PAXOS', 'USD')
@@ -481,7 +548,8 @@ schedule.every(frame_size).minutes.do(scheduled_task,
                                       ema_short,
                                       ema_medium,
                                       ema_long,
-                                      vwap)
+                                      vwap,
+                                      rsi_period)
 
 # Keep the scheduler running
 print(f"Starting run... {ticker_name}")
@@ -503,7 +571,8 @@ try:
                            ema_short,
                            ema_medium,
                            ema_long,
-                           vwap)
+                           vwap,
+                           rsi_period)
         else:
             schedule.run_pending()
             time.sleep(1)  # Sleep to prevent CPU overuse
