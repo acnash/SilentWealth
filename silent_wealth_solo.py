@@ -37,7 +37,7 @@ global_first_adjustment = True
 global_previous_ema = None
 
 
-def sell_market_order(ib_input, symbol, quantity_input, stock_input):
+def sell_market_order(ib_input, symbol, quantity_input):
     # sell here...
     global holding_stock
 
@@ -90,7 +90,7 @@ def sell_market_BTC_order(ib_input, btc_contract):
             print("No BTC to sell or invalid position.")
 
 
-def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
+def place_market_BTC_order(ib_input, stock_input, quantity_input, cash, take_profit_input):
     global holding_stock
     global global_buy_price
     global global_ema20
@@ -103,31 +103,49 @@ def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
         btc_price = share_ticker.last if share_ticker.last > 0 else share_ticker.bid
         btc_quantity = cash / btc_price
         btc_quantity = round(btc_quantity, 8)
-        #order = MarketOrder('BUY', btc_quantity)
-        #order.cashQty = cash
 
-        order = LimitOrder(
+        parent_order = LimitOrder(
             action='BUY',  # 'BUY' to purchase BTC
             totalQuantity=btc_quantity,  # Specify the calculated BTC quantity
             lmtPrice=btc_price  # Set limit price to 0 (market-like)
         )
-        #order.cashQty = cash
-        order.tif = 'IOC'
-        trade = ib_input.placeOrder(stock_input, order)
+        parent_order.tif = 'IOC'
+        parent_id = parent_order.orderId
+
+        # Create the Take Profit Limit Order
+        take_profit_order = LimitOrder('SELL', totalQuantity=parent_order.totalQuantity, lmtPrice=btc_price * (1 + take_profit_input))
+        take_profit_order.parentId = parent_id  # Link to parent order
+
+        # Create the Stop Loss Order
+        stop_loss_order = StopOrder('SELL', totalQuantity=parent_order.totalQuantity, stopPrice=btc_price * (1 - take_profit_input))
+        stop_loss_order.parentId = parent_id  # Link to parent order
+
+        # Assign the same OCA group to the Take Profit and Stop Loss orders
+        oca_group = f"OCA_{parent_order.orderId}"
+        take_profit_order.ocaGroup = oca_group
+        stop_loss_order.ocaGroup = oca_group
+
+        trade = ib_input.placeOrder(stock_input, parent_order)
         print(f"...Placing limit order of {btc_quantity} of BTC at bid price of {btc_price} per share")
 
         while not trade.isDone():
-            #ib_input.waitOnUpdate()
+            # ib_input.waitOnUpdate()
             ib_input.sleep(2)
 
         if trade.fills:
             fill_price = trade.fills[0].execution.price
             global_buy_price = fill_price
             print(f"Trade filled at {fill_price} price per share")
-            stop_loss_offset = 1.000 - stop_loss_percent
-            stop_loss_price = round(fill_price * stop_loss_offset, 3)
-            print(f"Stop-loss price set at {stop_loss_price:.3f}")
-            stop_order = StopOrder('SELL', btc_quantity, stop_loss_price)
+
+            #set a stop loss and a take profit
+            ib_input.placeOrder(stock_input, take_profit_order)
+            ib_input.placeOrder(stock_input, stop_loss_order)
+
+
+        #    #stop_loss_offset = 1.000 - stop_loss_percent
+        #    #stop_loss_price = round(fill_price * stop_loss_offset, 3)
+        #    #print(f"Stop-loss price set at {stop_loss_price:.3f}")
+        #    #stop_order = StopOrder('SELL', btc_quantity, stop_loss_price)
             holding_stock = True
         else:
             print("Trade did not fill.")
@@ -135,7 +153,7 @@ def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
 
     else:
         print("Holding and looking to adjust the stop loss.")
-        #if global_ema20 > global_buy_price and global_first_adjustment:
+        # if global_ema20 > global_buy_price and global_first_adjustment:
         #    print(
         #        f"EMA20 {global_ema20} > original buy price. "
         #        f"Adjusting stop loss to {global_ema20} to track the curve and avoid losses.")
@@ -143,7 +161,7 @@ def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
         #    trade = ib_input.placeOrder(stock_input, stop_order)
         #    global_previous_ema = global_ema20
         #    global_first_adjustment = False
-        #elif global_ema20 > global_previous_ema and not global_first_adjustment:
+        # elif global_ema20 > global_previous_ema and not global_first_adjustment:
         #    print(
         #        f"EMA20 {global_ema20} > previous EMA20 {global_previous_ema}. "
         #        f"Adjusting stop loss to {global_ema20} to track the curve and avoid losses.")
@@ -152,7 +170,7 @@ def place_market_BTC_order(ib_input, stock_input, quantity_input, cash):
         #    global_previous_ema = global_ema20
 
 
-def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_percent):
+def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_percent, take_profit_input):
     # buy here...
     global holding_stock
     global global_buy_price
@@ -162,15 +180,15 @@ def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_
 
     if holding_stock:
         if global_ema20 > global_buy_price and global_first_adjustment:
-            print(
-                f"EMA20 {global_ema20} > original buy price. Adjusting stop loss to {global_ema20} to track the curve and avoid losses.")
+            print(f"EMA20 {global_ema20} > original buy price. Adjusting stop loss to {global_ema20} "
+                  f"to track the curve and avoid losses.")
             stop_order = StopOrder('SELL', quantity_input, global_ema20)
             trade = ib_input.placeOrder(stock_input, stop_order)
             global_previous_ema = global_ema20
             global_first_adjustment = False
         elif not global_first_adjustment and global_ema20 > global_previous_ema:
-            print(
-                f"EMA20 {global_ema20} > previous EMA20 {global_previous_ema}. Adjusting stop loss to {global_ema20} to track the curve and avoid losses.")
+            print(f"EMA20 {global_ema20} > previous EMA20 {global_previous_ema}. "
+                  f"Adjusting stop loss to {global_ema20} to track the curve and avoid losses.")
             stop_order = StopOrder('SELL', quantity_input, global_ema20)
             trade = ib_input.placeOrder(stock_input, stop_order)
             global_previous_ema = global_ema20
@@ -181,8 +199,13 @@ def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_
         # print(f"...Placing limit order of {quantity_input} of {symbol} shares at {bid_price} per share")
         # buy_order = LimitOrder('BUY', quantity_input, bid_price)
         buy_order = MarketOrder('BUY', quantity_input)  # 'BUY' indicates the action and 10 is the quantity of shares
-        print(f"...Placing market order of {quantity_input} of {symbol} shares.")
+        buy_order_id = buy_order.orderId
+        print(f"Placing market order of {quantity_input} of {symbol} shares.")
+        # random_integer = random.randint(1, 10000)
+        # oca_group = f"OCA_Group_{random_integer}"
+        # buy_order.ocaGroup = oca_group
         trade = ib_input.placeOrder(stock_input, buy_order)
+        # ib_input.sleep(2)
 
         # Wait for the order to fill
         while not trade.isDone():
@@ -193,19 +216,33 @@ def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_
             fill_price = trade.fills[0].execution.price
             global_buy_price = fill_price
             print(f"Trade filled at {fill_price} price per share")
-            stop_loss_offset = 1.000 - stop_loss_percent
-            stop_loss_price = round(fill_price * stop_loss_offset, 3)
-            print(f"Stop-loss price set at {stop_loss_price:.3f}")
-            stop_order = StopOrder('SELL', quantity_input, stop_loss_price)
-            trade = ib_input.placeOrder(stock_input, stop_order)
-            print(trade)
         else:
             print("ERROR: trade not filled. Please check the Trader Workstation.")
+            print(f"{trade}")
+            return
 
+        if take_profit_input > 0:
+            take_profit_price = fill_price * (1 + take_profit_input)
+            print(f"Take profit percent {take_profit_input} will execute at {take_profit_price}")
 
-# def silent_wealth_start(ib_input, stock_input, frame_size, stock_name):
-#    # For the first trade the holding list is empty
-#    return decision_maker(ib_input, stock_input, frame_size, stock_name)
+            # Create the Take Profit Order
+            take_profit_order = LimitOrder('SELL', quantity_input, take_profit_price)
+            take_profit_order.parentId = buy_order_id
+            # take_profit_order.ocaGroup = oca_group
+
+            trade = ib_input.placeOrder(stock_input, take_profit_order)
+            # print(trade)
+
+            # Wait for the order to fill
+            # while not trade.isDone():
+            #    ib_input.waitOnUpdate()
+
+            # if trade.fills:
+            #    print(f"Take profit filled")
+            # else:
+            #    print("ERROR: setting take profit. One has not been set.")
+            #    print(f"{trade}")
+            #    return
 
 
 def silent_wealth_start(ib_input,
@@ -241,112 +278,123 @@ def silent_wealth_start(ib_input,
         rsi_obj = RSI(df_ema_short)
         rsi_value = rsi_obj.calculate_rsi(rsi_period_input)
 
-
-
     global_ema20 = ema_medium_input
     date_of_action = df_ema_short["date"].iloc[-1]
 
     if vwap_input == 0 and ema_long_input > 0 and rsi_period_input > 0:
-        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and (rsi_value > 50 and rsi_value <=70):
+        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and (50 < rsi_value <= 70):
             print(
-                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
+                f"BUY signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
             print(
-                f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
+                f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
             return SELL
         else:
             print(
-                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
+                f"HOLD signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  RSI: {rsi_value:.3f}")
             return HOLD
 
 
     elif ema_long_input == 0 and vwap_input > 0 and rsi_period_input == 0:
         if ema_short_input > ema_medium_input and ema_short_input > vwap_value:
             print(
-                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}")
+                f"BUY signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
             print(
-                f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}")
+                f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}")
             return SELL
         else:
             print(
-                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}")
+                f"HOLD signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}")
             return HOLD
 
 
     elif ema_long_input > 0 and vwap == 0 and rsi_period_input == 0:
         if ema_short_input > ema_medium_input and ema_short_input > ema_long_input:
-            print(f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+            print(
+                f"BUY signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
-            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+            print(
+                f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}")
             return SELL
         else:
-            print(f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}")
+            print(
+                f"HOLD signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}")
             return HOLD
 
     elif ema_long_input > 0 and vwap > 0 and rsi_period_input == 0:
         if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and ema_short_input > vwap_value:
-            print(f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+            print(
+                f"BUY signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
-            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+            print(
+                f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
             return SELL
         else:
-            print(f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
+            print(
+                f"HOLD signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  vwap: {vwap_value:.3f}")
             return HOLD
 
     elif ema_long_input == 0 and vwap == 0 and rsi_period_input > 0:
-        if ema_short_input > ema_medium_input and (rsi_value > 50 and rsi_value <=70):
-            print(f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
+        if ema_short_input > ema_medium_input and (50 < rsi_value <= 70):
+            print(
+                f"BUY signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
-            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
+            print(
+                f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
             return SELL
         else:
-            print(f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
+            print(
+                f"HOLD signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  RSI: {rsi_value:.3f}")
             return HOLD
 
 
     elif ema_long_input == 0 and vwap == 0 and rsi_period_input == 0:  # only the short and medium EMA
         if ema_short_input > ema_medium_input:
-            print(f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}")
+            print(
+                f"BUY signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
-            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}")
+            print(
+                f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}")
             return SELL
         else:
-            print(f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}")
+            print(
+                f"HOLD signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}")
             return HOLD
 
     elif ema_long_input == 0 and vwap_input > 0 and rsi_period_input > 0:
-        if ema_short_input > ema_medium_input and ema_short_input > vwap_value and (rsi_value > 50 and rsi_value <=70):
+        if ema_short_input > ema_medium_input and ema_short_input > vwap_value and (50 < rsi_value <= 70):
             print(
-                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+                f"BUY signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
             print(
-                f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+                f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return SELL
         else:
             print(
-                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+                f"HOLD signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return HOLD
 
 
     else:  # This is for all conditions
-        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and ema_short_input > vwap_value and (rsi_value > 50 and rsi_value <=70):
+        if ema_short_input > ema_medium_input and ema_short_input > ema_long_input and ema_short_input > vwap_value and (rsi_value > 50 and rsi_value <= 70):
             print(
-                f"BUY signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+                f"BUY signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return BUY
         elif ema_short_input <= ema_medium_input:
-            print(f"SELL signal (if holding) - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+            print(
+                f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return SELL
         else:
             print(
-                f"HOLD signal - {date_of_action} -- ema9: {ema_short_input:.3f}  ema20: {ema_medium_input:.3f}  ema200: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+                f"HOLD signal - {date_of_action} -- ema_short: {ema_short_input:.3f}  ema_medium: {ema_medium_input:.3f}  ema_long: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return HOLD
 
 
@@ -365,13 +413,13 @@ def scheduled_task(ib_input,
                    ema_medium,
                    ema_long,
                    vwap,
-                   rsi_period):
+                   rsi_period,
+                   take_profit_input):
     global holding_stock
     current_time = datetime.now().time()
 
     start_process = False
-    if current_time >= datetime.strptime(start_time, "%H:%M").time() and \
-            current_time <= datetime.strptime(stop_time, "%H:%M").time():
+    if datetime.strptime(start_time, "%H:%M").time() <= current_time <= datetime.strptime(stop_time, "%H:%M").time():
         start_process = True
 
     if start_process:
@@ -391,17 +439,17 @@ def scheduled_task(ib_input,
             if ticker_name_input == "BTC":
                 sell_market_BTC_order(ib_input, stock_input)
             else:
-                sell_market_order(ib_input, ticker_name_input, quantity_input, stock_input)
+                sell_market_order(ib_input, ticker_name_input, quantity_input)
         elif action == BUY:
             if ticker_name_input == "BTC":
-                place_market_BTC_order(ib_input, stock_input, quantity_input, dollar_amount)
+                place_market_BTC_order(ib_input, stock_input, quantity_input, dollar_amount, take_profit_input)
             else:
-                place_market_order(ib_input, stock_input, quantity_input, ticker_name_input, stop_loss_percent)
+                place_market_order(ib_input, stock_input, quantity_input, ticker_name_input, stop_loss_percent,
+                                   take_profit_input)
     else:
         # outside of trading hours for regular stock
         close_down_trades = False
-        if current_time > datetime.strptime(stop_time, "%H:%M").time() and \
-                current_time <= datetime.strptime(close_time, "%H:%M").time():
+        if datetime.strptime(stop_time, "%H:%M").time() < current_time <= datetime.strptime(close_time, "%H:%M").time():
             close_down_trades = True
 
         if close_down_trades:
@@ -442,7 +490,11 @@ parser.add_argument("--ema_long", type=int, default=200, required=False,
 parser.add_argument("--vwap", type=int, default=9, required=False,
                     help="Units to compute the volume-weighted average price. Default is 9.")
 parser.add_argument("--rsi_period", type=int, default=14, required=False,
-                    help="Units to compute the RSI. Default is 14.")
+                    help="Units to compute the RSI. Default is 14. Set to 0 to turn off.")
+parser.add_argument("--take_profit", type=float, default=0.02, required=False,
+                    help="A take profit set from the buy position as a percentage of the investment. "
+                         "Set to 0 to switch off. "
+                         "Default is 0.02 e.g., 2% of the investment value.")
 args = parser.parse_args()
 
 ticker_name = args.ticker_name
@@ -457,6 +509,7 @@ ema_medium = args.ema_medium
 ema_long = args.ema_long
 vwap = args.vwap
 rsi_period = args.rsi_period
+take_profit = args.take_profit
 
 client_id = random.randint(1, 9999)
 ib = IB()
@@ -500,6 +553,7 @@ else:
     ib.disconnect()
     exit()
 
+print(f"Take profit percent: {take_profit}")
 print(f"Currency: {currency}")
 print(f"Account type: {account}\n")
 print("BUY/SELL conditions")
@@ -510,15 +564,10 @@ print(f"Volume-weighted average price: {vwap}")
 print(f"RSI period: {rsi_period}\n")
 
 if ticker_name == "BTC":
-    #stock = Crypto('BTC', 'PAXOS', 'USD')
-    stock = Contract(
-        secType='CRYPTO',
-        symbol='BTC',
-        exchange='PAXOS',
-        currency='USD'
-    )
+    stock = Contract(secType='CRYPTO', symbol='BTC', exchange='PAXOS', currency='USD')
 else:
     stock = Stock(symbol=ticker_name, exchange=exchange, currency=currency)
+
 ib.qualifyContracts(stock)
 ib.reqMktData(stock)
 ib.sleep(2)
@@ -549,7 +598,8 @@ schedule.every(frame_size).minutes.do(scheduled_task,
                                       ema_medium,
                                       ema_long,
                                       vwap,
-                                      rsi_period)
+                                      rsi_period,
+                                      take_profit)
 
 # Keep the scheduler running
 print(f"Starting run... {ticker_name}")
@@ -572,7 +622,8 @@ try:
                            ema_medium,
                            ema_long,
                            vwap,
-                           rsi_period)
+                           rsi_period,
+                           take_profit)
         else:
             schedule.run_pending()
             time.sleep(1)  # Sleep to prevent CPU overuse

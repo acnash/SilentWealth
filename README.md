@@ -6,7 +6,7 @@
 - `--quantity` the number of stocks to trade (not applicable for BTC).
 - `--frame_size` trade windows in minutes. Typically, set this to `1` or `5`.
 - `--account` Set to `paper` or `live`. 
-- `--stop_loss_percent` 0 to 1 as a fraction from the trade value e.g., 0.01 sets a -1% stop loss below the trade value. 
+- `--stop_loss_percent` 0 to 1 as a fraction from the stock value e.g., 0.01 sets a -1% stop loss below the stock value. 
 
 ### Adjusting BUY/SELL conditions:
 
@@ -14,7 +14,8 @@
 - `--ema_medium` medium-range exponential moving average (default: 20)
 - `--ema_long` long-range exponential moving average (default: 200). Set to 0 to exclude from BUY conditions.
 - `--vwap` volume-weighted average price (default: 9). Set to 0 to exclude from BUY conditions.
-
+- `--rsi_period` units to compute the RSI. Default is 14. Set to 0 to turn off.
+- `--take_profit` a take profit set from the buy position as a percentage of the investment. Set to 0 to switch off. Default is 0.02 e.g., 2% of the investment value.
 
 ## Examples
 
