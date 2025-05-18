@@ -9,7 +9,7 @@ class SilentWealthInputs:
         except KeyError:
             print("Error: account_data not provided in YAML input file. Exiting.")
             exit()
-        self.account = account_data.get("account", "paper")  # always returns paper if no value given
+        self.account = account_data.get("account", "paper")
 
         try:
             stock = yaml_inputs["stock"]
@@ -35,9 +35,10 @@ class SilentWealthInputs:
             exit()
         try:
             self.purchase_type = buy_sell_conditions.get("purchase_type", "market_order")
-            self.stop_loss = buy_sell_conditions.get("")
+            self.stop_loss = buy_sell_conditions.get("stop_loss", 0)
+            self.take_profit = buy_sell_conditions.get("take_profit", 0)
         except KeyError:
-            print("Error: incorrect entry in buy_sell_conditions")
+            print("Error: incorrect entry in buy_sell_conditions. Exiting.")
             exit()
 
         try:
@@ -45,33 +46,12 @@ class SilentWealthInputs:
         except KeyError:
             print("Error: monitor_conditions not provided in YAML input file. Exiting.")
             exit()
-
-buy_sell_conditions:
-purchase_type: limit_order
-stop_loss: 0
-take_profit: 0
-limit_order: False
-
-monitor_conditions:
-ema_short: 9
-ema_medium: 20
-ema_long: 200
-vwap: 9
-rsi_period: 14
-anchor_distance: 0
-
-# ticker_name = args.ticker_name
-# exchange = args.exchange
-# quantity = args.quantity
-# frame_size = args.frame_size
-# account = args.account.lower()
-# stop_loss_percent = args.stop_loss
-# dollar_amount = args.dollar_amount
-# ema_short = args.ema_short
-# ema_medium = args.ema_medium
-# ema_long = args.ema_long
-# vwap = args.vwap
-# rsi_period = args.rsi_period
-# take_profit = args.take_profit
-# limit_order = args.limit_order
-# anchor_distance = args.anchor_distance
+        try:
+            self.ema_short = monitor_conditions.get("ema_short", 9)
+            self.ema_medium = monitor_conditions.get("ema_medium", 20)
+            self.ema_long = monitor_conditions.get("ema_long", 200)
+            self.vwap = monitor_conditions.get("vwap", 9)
+            self.rsi_period = monitor_conditions.get("rsi_period", 14)
+            self.anchor_distance = monitor_conditions.get("anchor_distance", 0)
+        except KeyError:
+            print("Error: incorrect entry in monitor_conditions. Exiting.")
