@@ -135,19 +135,18 @@ def place_market_BTC_order(ib_input, stock_input, quantity_input, cash, take_pro
             global_buy_price = fill_price
             print(f"Trade filled at {fill_price} price per share")
 
-            #set a stop loss and a take profit
+            # set a stop loss and a take profit
             tp_trade = ib_input.placeOrder(stock_input, take_profit_order)
             ib_input.sleep(2)
-            #while not tp_trade.isDone():
+            # while not tp_trade.isDone():
             #    print("Waiting to place take profit order")
             sl_trade = ib_input.placeOrder(stock_input, stop_loss_order)
             ib_input.sleep(2)
 
-
-        #    #stop_loss_offset = 1.000 - stop_loss_percent
-        #    #stop_loss_price = round(fill_price * stop_loss_offset, 3)
-        #    #print(f"Stop-loss price set at {stop_loss_price:.3f}")
-        #    #stop_order = StopOrder('SELL', btc_quantity, stop_loss_price)
+            #    #stop_loss_offset = 1.000 - stop_loss_percent
+            #    #stop_loss_price = round(fill_price * stop_loss_offset, 3)
+            #    #print(f"Stop-loss price set at {stop_loss_price:.3f}")
+            #    #stop_order = StopOrder('SELL', btc_quantity, stop_loss_price)
             holding_stock = True
         else:
             print("Trade did not fill.")
@@ -172,7 +171,13 @@ def place_market_BTC_order(ib_input, stock_input, quantity_input, cash, take_pro
         #    global_previous_ema = global_ema20
 
 
-def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_input, take_profit_input, limit_order_input):
+def place_market_order(ib_input,
+                       stock_input,
+                       quantity_input,
+                       symbol,
+                       stop_loss_input,
+                       take_profit_input,
+                       limit_order_input):
     # buy here...
     global holding_stock
     global global_buy_price
@@ -185,64 +190,81 @@ def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_
         if global_ema20 > global_buy_price and global_first_adjustment:
             print(f"EMA20 {global_ema20} > original buy price. Adjusting stop loss to {global_ema20} "
                   f"to track the curve and avoid losses.")
-            #stop_order = StopOrder('SELL', quantity_input, global_ema20)
-            #trade = ib_input.placeOrder(stock_input, stop_order)
+            # stop_order = StopOrder('SELL', quantity_input, global_ema20)
+            # trade = ib_input.placeOrder(stock_input, stop_order)
             global_previous_ema = global_ema20
             global_first_adjustment = False
         elif not global_first_adjustment and global_ema20 > global_previous_ema:
             print(f"EMA20 {global_ema20} > previous EMA20 {global_previous_ema}. "
                   f"Adjusting stop loss to {global_ema20} to track the curve and avoid losses.")
-            #stop_order = StopOrder('SELL', quantity_input, global_ema20)
-            #trade = ib_input.placeOrder(stock_input, stop_order)
+            # stop_order = StopOrder('SELL', quantity_input, global_ema20)
+            # trade = ib_input.placeOrder(stock_input, stop_order)
             global_previous_ema = global_ema20
     else:
         # place a bracket order if a stop loss and take profit exists
-        #ticker = ib_input.reqMktData(stock_input)
-        #while not ticker.bid or not ticker.ask:
+        # ticker = ib_input.reqMktData(stock_input)
+        # while not ticker.bid or not ticker.ask:
         #    ib.sleep(1)
 
         # Set the buy price as the bid (cheapest available price)
-        #bid = ticker.bid
-        #ask = ticker.ask
-        #last = ticker.last
-        #lower_quartile_price = bid + 0.25 * (ask - bid)
-        if stop_loss_input and take_profit_input:
+        # bid = ticker.bid
+        # ask = ticker.ask
+        # last = ticker.last
+        # lower_quartile_price = bid + 0.25 * (ask - bid)
+        if stop_loss_input:
             # Create the market order (parent)
             parent_order = MarketOrder('BUY', quantity_input)
-            parent_order.ocaGroup = f"oca_group_{parent_order.orderId}"
+            # parent_order.ocaGroup = f"oca_group_{parent_order.orderId}"
 
             # Place the parent market order
             parent_trade = ib_input.placeOrder(stock_input, parent_order)
 
             # Monitor the parent order's status through the Trade object
-            while parent_trade.orderStatus.status not in ['Filled', 'Cancelled']:
-                print(f"Parent order status: {parent_trade.orderStatus.status}")
-                ib_input.sleep(1)
+            while not parent_trade.isDone():
+               ib_input.waitOnUpdate()
+
             for fill in parent_trade.fills:
-                filled_price = fill.execution.price  # Corrected to access the price from the Fill object
-                print(f"Parent order filled at price: {filled_price}")
+               filled_price = fill.execution.price  # Corrected to access the price from the Fill object
+               print(f"Parent order filled at price: {filled_price} for order: {parent_order.orderId}")
+               holding_stock = True
+               global_buy_price = filled_price
 
-            take_order_price = filled_price * (1 + take_profit_input)
+            # take_order_price = filled_price * (1 + take_profit_input)
             # Create the take profit order (limit order)
-            take_profit_order = LimitOrder('SELL', quantity, take_order_price, parentId=parent_order.orderId)
-            take_profit_order.ocaGroup = f"oca_group_{parent_order.orderId}"
+            # take_profit_order = LimitOrder('SELL', quantity, take_order_price, parentId=parent_order.orderId)
+            # take_profit_order.ocaGroup = f"oca_group_{parent_order.orderId}"
 
-            stop_loss_price = filled_price * (1 - stop_loss_input)
+            # stop_loss_price = filled_price * 0.95 #* (1 - stop_loss_input)
+            # stop_loss_price = ticker_name * 0.95  # * (1 - stop_loss_input)
             # Create the stop loss order (stop order)
-            stop_loss_order = StopOrder('SELL', quantity, stop_loss_price, parentId=parent_order.orderId)
-            stop_loss_order.ocaGroup = f"oca_group_{parent_order.orderId}"
 
-            if parent_trade.orderStatus.status == 'Filled':
-                # Parent order is filled, now place the child orders (take profit and stop loss)
-                ib_input.placeOrder(stock_input, take_profit_order)
-                print(f"Take profit at {take_order_price}")
-                ib_input.placeOrder(stock_input, stop_loss_order)
-                print(f"Stop loss at {stop_loss_price}")
-                print("Child orders placed.")
-            else:
-                print("Parent order was not filled.")
+            ticker = ib_input.reqMktData(stock_input)
+            while not ticker.bid or not ticker.ask:
+                ib_input.sleep(5)
 
-        else:  #a market order or limit order without stop loss or take profit
+            # Set the buy price as the bid (cheapest available price)
+            bid = ticker.bid
+            ask = ticker.ask
+            last = ticker.last
+
+            print(f"Setting a stop loss of 0.95 from {last} to {round(last - 20, 4)}")
+            # stop_loss_order = StopOrder('SELL', quantity, stopPrice=round(stop_loss_price-4,4), parentId=parent_order.orderId)
+            stop_loss_order = LimitOrder('SELL', quantity_input, 300)
+            # stop_loss_order.ocaGroup = f"oca_group_{parent_order.orderId}"
+            # if parent_trade.orderStatus.status == 'Filled':
+            # Parent order is filled, now place the child orders (take profit and stop loss)
+            # ib_input.placeOrder(stock_input, take_profit_order)
+            # print(f"Take profit at {take_order_price}")
+            stop_order_trade = ib_input.placeOrder(stock_input, stop_loss_order)
+            ib_input.sleep()
+            print(stop_loss_order.orderRef)
+            print(
+                f"Stop loss at {round(last, 4)} for order: {stop_loss_order.orderId} with parent id: {stop_loss_order.parentId}")
+            # print("Child orders placed.")
+            # else:
+            #    print("Parent order was not filled.")
+
+        else:  # a market order or limit order without stop loss or take profit
             if limit_order_input:
                 ticker_limit = ib_input.reqMktData(stock_input)
                 bid = ticker_limit.bid
@@ -258,8 +280,9 @@ def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_
                     holding_stock = True
                     global_buy_price = trade.fills[0].execution.price
                 else:
-                    print(f'Warning: Limit order failed to fill at {lower_quartile_price} across the range: {bid} - {ask}.'
-                          ' Attempting a market order instead.')
+                    print(
+                        f'Warning: Limit order failed to fill at {lower_quartile_price} across the range: {bid} - {ask}.'
+                        ' Attempting a market order instead.')
                     buy_order = MarketOrder('BUY',
                                             quantity_input)  # 'BUY' indicates the action and 10 is the quantity of shares
                     print(f"Placing market order of {quantity_input} of {symbol} shares.")
@@ -279,9 +302,10 @@ def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_
                         print(f"{trade}")
                         holding_stock = False
                         return
-                    #holding_stock = False
-            else:
-                buy_order = MarketOrder('BUY', quantity_input)  # 'BUY' indicates the action and 10 is the quantity of shares
+                    # holding_stock = False
+            else:  # place a market order instead
+                buy_order = MarketOrder('BUY',
+                                        quantity_input)  # 'BUY' indicates the action and 10 is the quantity of shares
                 print(f"Placing market order of {quantity_input} of {symbol} shares.")
                 trade = ib_input.placeOrder(stock_input, buy_order)
 
@@ -299,10 +323,7 @@ def place_market_order(ib_input, stock_input, quantity_input, symbol, stop_loss_
                     print(f"{trade}")
                     return
 
-
-
-
-        #if take_profit_input > 0:
+        # if take_profit_input > 0:
         #    take_profit_price = fill_price * (1 + take_profit_input)
         #    print(f"Take profit percent {take_profit_input} will execute at {take_profit_price}")
         #
@@ -373,10 +394,10 @@ def silent_wealth_start(ib_input,
         temp_medium = df_ema_medium[f"{ema_medium_input}_day_EMA"][i]
         if temp_short > temp_medium:
             # Calculate the number of places from the last entry
-            #places_from_last = places_from_last + len(df_ema_short) - 1 - i
+            # places_from_last = places_from_last + len(df_ema_short) - 1 - i
             places_from_last = places_from_last + 1
-            #print(f"The value in 'short' is {temp_short:.3f} > 'medium' {temp_medium:.3f} at index {i}.")
-            #print(f"The number of places from the last entry is: {places_from_last}")
+            # print(f"The value in 'short' is {temp_short:.3f} > 'medium' {temp_medium:.3f} at index {i}.")
+            # print(f"The number of places from the last entry is: {places_from_last}")
         else:
             if places_from_last > places_from_last_input:
                 print(f"Too far from the cross-over BUY signal: {places_from_last}")
@@ -385,10 +406,8 @@ def silent_wealth_start(ib_input,
             else:
                 print(f"Within {places_from_last} cross-over to buy.")
                 break
-    #else:
+    # else:
     #    print("No match found where 'short' is >= 'medium'.")
-
-
 
     if vwap_input == 0 and ema_long_input > 0 and rsi_period_input > 0:
         if ema_short_value > ema_medium_value and ema_short_value > ema_long_input and (50 < rsi_value <= 70):
@@ -493,7 +512,8 @@ def silent_wealth_start(ib_input,
 
 
     else:  # This is for all conditions
-        if ema_short_value > ema_medium_value and ema_short_value > ema_long_input and ema_short_value > vwap_value and (rsi_value > 50 and rsi_value <= 70):
+        if ema_short_value > ema_medium_value and ema_short_value > ema_long_input and ema_short_value > vwap_value and (
+                rsi_value > 50 and rsi_value <= 70):
             print(
                 f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_input:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
             return BUY
@@ -607,7 +627,7 @@ parser.add_argument("--take_profit", type=float, default=0, required=False,
                     help="A take profit set from the buy position as a percentage stock price. e.g. 0.02 e.g., "
                          "2% of the stock value. Default: 0 (turns this feature off).")
 parser.add_argument('--limit_order', action='store_true', help="Attempt to use limit orders rather than market orders."
-                    "Warning: this will buy at the bid and therefore is subject at failing to order if the price "
+                                                               "Warning: this will buy at the bid and therefore is subject at failing to order if the price "
                                                                "fluctuates from the initial bid-ask range.")
 parser.add_argument("--anchor_distance", type=int, default=0, required=False,
                     help="Pins a buy order within a distance from the short crossing up and over the medium. "
@@ -673,6 +693,7 @@ else:
     exit()
 
 print(f"Take profit percent: {take_profit}")
+print(f"Stop loss percent: {stop_loss_percent}")
 print(f"Currency: {currency}")
 print(f"Account type: {account}\n")
 print("BUY/SELL conditions")
@@ -686,7 +707,8 @@ print(f"Anchor distance from BUY signal: {anchor_distance}\n")
 if ticker_name == "BTC":
     stock = Contract(secType='CRYPTO', symbol='BTC', exchange='PAXOS', currency='USD')
 else:
-    stock = Stock(symbol=ticker_name, exchange=exchange, currency=currency)
+    # stock = Stock(symbol=ticker_name, exchange=exchange, currency=currency)
+    stock = Stock(symbol=ticker_name, exchange="SMART", primaryExchange="BATEUK", currency=currency)
 
 ib.qualifyContracts(stock)
 ib.reqMktData(stock)
