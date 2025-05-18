@@ -9,6 +9,7 @@ import pandas as pd
 
 from RSI import RSI
 from exp_moving_average import ExpMovingAverage
+from src.silent_wealth_inputs import SilentWealthInputs
 from volume_weighted_average import VolumeWeightedAverage
 
 PAPER_PORT = 7497
@@ -598,57 +599,70 @@ def scheduled_task(ib_input,
 
 
 # =======================================================================================================================
-parser = argparse.ArgumentParser(description="Silent Wealth")
-parser.add_argument("--ticker_name", type=str,
-                    help="Ticker name e.g., BP. SOXL SOXS, and BTC for Bitcoin", required=True)
-parser.add_argument("--exchange", type=str,
-                    help="Exchange e.g., LSE LSEETF ARCA. Not required for Bitcoin.", required=False)
-parser.add_argument("--quantity", type=int,
-                    help="The number of shares to buy/sell", required=False)
-parser.add_argument("--frame_size", type=int,
-                    help="Minute candle size e.g., 1, 5, or 10", required=True)
-parser.add_argument("--account", type=str,
-                    help="Account type e.g., paper or live", required=True)
-parser.add_argument("--stop_loss", type=float, default=0,
-                    help="The percent below the buy position to take as a stop-loss", required=False)
-parser.add_argument("--dollar_amount", type=int,
-                    help="Amount of bitcoin to buy in dollars", required=False)
-parser.add_argument("--ema_short", type=int, default=9, required=False,
-                    help="Units to compute the short-range exponential moving average. Default is 9.")
-parser.add_argument("--ema_medium", type=int, default=20, required=False,
-                    help="Units to compute the mid-range exponential moving average. Default is 20.")
-parser.add_argument("--ema_long", type=int, default=200, required=False,
-                    help="Units to compute the long-range exponential moving average. Default is 200.")
-parser.add_argument("--vwap", type=int, default=9, required=False,
-                    help="Units to compute the volume-weighted average price. Default is 9.")
-parser.add_argument("--rsi_period", type=int, default=14, required=False,
-                    help="Units to compute the RSI. Default is 14. Set to 0 to turn off.")
-parser.add_argument("--take_profit", type=float, default=0, required=False,
-                    help="A take profit set from the buy position as a percentage stock price. e.g. 0.02 e.g., "
-                         "2% of the stock value. Default: 0 (turns this feature off).")
-parser.add_argument('--limit_order', action='store_true', help="Attempt to use limit orders rather than market orders."
-                                                               "Warning: this will buy at the bid and therefore is subject at failing to order if the price "
-                                                               "fluctuates from the initial bid-ask range.", default=False)
-parser.add_argument("--anchor_distance", type=int, default=0, required=False,
-                    help="Pins a buy order within a distance from the short crossing up and over the medium. "
-                         "The longer this value, the more likely the BUY signal will happen shortly before a SELL signal.")
-args = parser.parse_args()
+import yaml
 
-ticker_name = args.ticker_name
-exchange = args.exchange
-quantity = args.quantity
-frame_size = args.frame_size
-account = args.account.lower()
-stop_loss_percent = args.stop_loss
-dollar_amount = args.dollar_amount
-ema_short = args.ema_short
-ema_medium = args.ema_medium
-ema_long = args.ema_long
-vwap = args.vwap
-rsi_period = args.rsi_period
-take_profit = args.take_profit
-limit_order = args.limit_order
-anchor_distance = args.anchor_distance
+parser = argparse.ArgumentParser(description="Silent Wealth")
+
+parser.add_argument("--input", type=str, required=True,
+                    help="YAML input file.")
+args = parser.parse_args()
+input_yaml_file = args.input
+with open(input_yaml_file, "r") as file:
+    yaml_inputs = yaml.safe_load(file)
+
+silent_wealth_inputs = SilentWealthInputs(yaml_inputs)
+
+
+# parser.add_argument("--ticker_name", type=str,
+#                     help="Ticker name e.g., BP. SOXL SOXS, and BTC for Bitcoin", required=True)
+# parser.add_argument("--exchange", type=str,
+#                     help="Exchange e.g., LSE LSEETF ARCA. Not required for Bitcoin.", required=False)
+# parser.add_argument("--quantity", type=int,
+#                     help="The number of shares to buy/sell", required=False)
+# parser.add_argument("--frame_size", type=int,
+#                     help="Minute candle size e.g., 1, 5, or 10", required=True)
+# parser.add_argument("--account", type=str,
+#                     help="Account type e.g., paper or live", required=True)
+# parser.add_argument("--stop_loss", type=float, default=0,
+#                     help="The percent below the buy position to take as a stop-loss", required=False)
+# parser.add_argument("--dollar_amount", type=int,
+#                     help="Amount of bitcoin to buy in dollars", required=False)
+# parser.add_argument("--ema_short", type=int, default=9, required=False,
+#                     help="Units to compute the short-range exponential moving average. Default is 9.")
+# parser.add_argument("--ema_medium", type=int, default=20, required=False,
+#                     help="Units to compute the mid-range exponential moving average. Default is 20.")
+# parser.add_argument("--ema_long", type=int, default=200, required=False,
+#                     help="Units to compute the long-range exponential moving average. Default is 200.")
+# parser.add_argument("--vwap", type=int, default=9, required=False,
+#                     help="Units to compute the volume-weighted average price. Default is 9.")
+# parser.add_argument("--rsi_period", type=int, default=14, required=False,
+#                     help="Units to compute the RSI. Default is 14. Set to 0 to turn off.")
+# parser.add_argument("--take_profit", type=float, default=0, required=False,
+#                     help="A take profit set from the buy position as a percentage stock price. e.g. 0.02 e.g., "
+#                          "2% of the stock value. Default: 0 (turns this feature off).")
+# parser.add_argument('--limit_order', action='store_true', help="Attempt to use limit orders rather than market orders."
+#                                                                "Warning: this will buy at the bid and therefore is subject at failing to order if the price "
+#                                                                "fluctuates from the initial bid-ask range.", default=False)
+# parser.add_argument("--anchor_distance", type=int, default=0, required=False,
+#                     help="Pins a buy order within a distance from the short crossing up and over the medium. "
+#                          "The longer this value, the more likely the BUY signal will happen shortly before a SELL signal.")
+# args = parser.parse_args()
+#
+# ticker_name = args.ticker_name
+# exchange = args.exchange
+# quantity = args.quantity
+# frame_size = args.frame_size
+# account = args.account.lower()
+# stop_loss_percent = args.stop_loss
+# dollar_amount = args.dollar_amount
+# ema_short = args.ema_short
+# ema_medium = args.ema_medium
+# ema_long = args.ema_long
+# vwap = args.vwap
+# rsi_period = args.rsi_period
+# take_profit = args.take_profit
+# limit_order = args.limit_order
+# anchor_distance = args.anchor_distance
 
 client_id = random.randint(1, 9999)
 ib = IB()
