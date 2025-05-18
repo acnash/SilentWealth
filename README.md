@@ -1,5 +1,14 @@
 # SilentWealth
 - --
+
+## To-do list
+1. Move all input arguments into a YAML file format. 
+2. Write Python code to pull down historical data. 
+3. Run canalysis over historical data with a measure of loss/gain.
+4. Write a volume indicator/trigger.
+5. Write a stochastic oscillator. 
+- --
+
 ## Arguments
 - `--ticker_name` the trade ticker name e.g. `BP.`, `LLOY`, `SOXS`, `SOXL`, `BTC`. Always required.
 - `--exchange` the name of the exchange, which also dictates the trading hours. Options are, `LSE`, `ARCA`, and `NASDAQ` (not applicable for BTC).

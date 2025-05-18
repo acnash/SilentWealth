@@ -1,0 +1,19 @@
+stock:
+  ticker_name: LLOY
+  exchange: LSE
+  quantity: 100
+  frame_size: 1
+account_data:
+  account: paper
+buy_sell_conditions:
+  purchase_type: limit_order
+  stop_loss: 0
+  take_profit: 0
+  limit_order: False
+monitor_conditions:
+  ema_short: 9
+  ema_medium: 20
+  ema_long: 200
+  vwap: 9
+  rsi_period: 14
+  anchor_distance: 0

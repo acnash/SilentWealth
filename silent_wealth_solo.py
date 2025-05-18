@@ -628,7 +628,7 @@ parser.add_argument("--take_profit", type=float, default=0, required=False,
                          "2% of the stock value. Default: 0 (turns this feature off).")
 parser.add_argument('--limit_order', action='store_true', help="Attempt to use limit orders rather than market orders."
                                                                "Warning: this will buy at the bid and therefore is subject at failing to order if the price "
-                                                               "fluctuates from the initial bid-ask range.")
+                                                               "fluctuates from the initial bid-ask range.", default=False)
 parser.add_argument("--anchor_distance", type=int, default=0, required=False,
                     help="Pins a buy order within a distance from the short crossing up and over the medium. "
                          "The longer this value, the more likely the BUY signal will happen shortly before a SELL signal.")
