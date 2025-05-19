@@ -38,27 +38,25 @@ class BTCController(Controller):
         ib.sleep(2)
         ticker = ib.ticker(stock)
 
-        schedule.every(frame_size).minutes.do(self._scheduled_task,
+        schedule.every(self.frame_size).minutes.do(self._scheduled_task,
                                               ib,
                                               stock,
-                                              ticker_name,
-                                              quantity,
-                                              frame_size,
-                                              stop_loss_percent,
-                                              dollar_amount,
-                                              start_time,
-                                              stop_time,
-                                              close_time,
-                                              ema_short,
-                                              ema_medium,
-                                              ema_long,
-                                              vwap,
-                                              rsi_period,
-                                              take_profit,
-                                              limit_order,
-                                              anchor_distance)
-
-
+                                              self.ticker_name,
+                                              self.quantity,
+                                              self.frame_size,
+                                              self.stop_loss_percent,
+                                              self.dollar_amount,
+                                              self.start_time,
+                                              self.stop_time,
+                                              self.close_time,
+                                              self.ema_short,
+                                              self.ema_medium,
+                                              self.ema_long,
+                                              self.vwap,
+                                              self.rsi_period,
+                                              self.take_profit,
+                                              self.limit_order,
+                                              self.anchor_distance)
 
         ib.disconnect()
         exit()
