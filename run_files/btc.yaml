@@ -1,5 +1,6 @@
 stock:
   ticker_name: BTC
+  exchange: PAXOS
   dollar_amount: 1000
   frame_size: 1
 account_data:
@@ -14,5 +15,5 @@ monitor_conditions:
   ema_medium: 20
   ema_long: 200
   vwap: 9
-  rsi_period: 14
+  rsi: 14
   anchor_distance: 0

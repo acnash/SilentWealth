@@ -8,11 +8,11 @@ from src.controllers.controller import Controller
 
 
 class BTCController(Controller):
-    BTC_PAXOS_START_TIME = "08:10"
-    BTC_PAXOS_END_TIME = "20:00"
-    BTC_PAXOS_CLOSE_TIME = "20:30"
+    # BTC_PAXOS_START_TIME = "08:10"
+    # BTC_PAXOS_END_TIME = "20:00"
+    # BTC_PAXOS_CLOSE_TIME = "20:30"
 
-    def __int__(self, silent_wealth_inputs):
+    def __init__(self, silent_wealth_inputs):
         super().__init__()
         self.silent_wealth_inputs = silent_wealth_inputs
         self.account = self.silent_wealth_inputs.account
@@ -40,7 +40,7 @@ class BTCController(Controller):
     def run(self):
         ib = super()._connect_to_ib(self.silent_wealth_inputs.account)
 
-        contract = Contract(secType='CRYPTO', symbol='BTC', exchange='PAXOS', currency='USD')
+        contract = Contract(secType='CRYPTO', symbol=self.ticker_name, exchange=self.exchange, currency='USD')
 
         ib.qualifyContracts(contract)
         ib.reqMktData(contract)

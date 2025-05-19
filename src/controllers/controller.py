@@ -29,7 +29,7 @@ class Controller(ABC):
     BUY = "buy"
     SELL = "sell"
 
-    def __int__(self, silent_wealth_inputs):
+    def __init__(self):
         self.holding_stock = None
 
     def _connect_to_ib(self, account):

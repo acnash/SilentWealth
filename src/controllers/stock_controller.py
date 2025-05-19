@@ -7,7 +7,7 @@ from src.controllers.controller import Controller
 
 class StockController(Controller):
 
-    def __int__(self, silent_wealth_inputs):
+    def __init__(self, silent_wealth_inputs):
         super().__init__()
         self.silent_wealth_inputs = silent_wealth_inputs
         self.account = self.silent_wealth_inputs.account

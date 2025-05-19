@@ -15,5 +15,5 @@ monitor_conditions:
   ema_medium: 20
   ema_long: 200
   vwap: 9
-  rsi_period: 14
+  rsi: 14
   anchor_distance: 0
