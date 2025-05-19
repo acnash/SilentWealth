@@ -20,11 +20,12 @@ def main():
     silent_wealth_inputs = SilentWealthInputs(yaml_inputs)
 
     if silent_wealth_inputs.ticker_name == "BTC":
-        controller = BTCController()
+        controller = BTCController(silent_wealth_inputs)
     else:
-        controller = StockController()
+        controller = StockController(silent_wealth_inputs)
 
-    validated = controller.validate(silent_wealth_inputs)
+    validated = controller.validate()
+
     if validated:
         controller.run()
 

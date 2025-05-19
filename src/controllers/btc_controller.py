@@ -1,4 +1,6 @@
 import schedule
+import time
+import traceback
 
 from ib_insync import Contract
 
@@ -6,6 +8,9 @@ from src.controllers.controller import Controller
 
 
 class BTCController(Controller):
+    BTC_PAXOS_START_TIME = "08:10"
+    BTC_PAXOS_END_TIME = "20:00"
+    BTC_PAXOS_CLOSE_TIME = "20:30"
 
     def __int__(self, silent_wealth_inputs):
         super().__init__()
@@ -22,8 +27,12 @@ class BTCController(Controller):
         self.ema_medium = self.silent_wealth_inputs.ema_medium
         self.ema_long = self.silent_wealth_inputs.ema_long
         self.vwap = self.silent_wealth_inputs.vwap
-        self.rsi_period = self.silent_wealth_inputs.rsi_period
+        self.rsi = self.silent_wealth_inputs.rsi
         self.anchor_distance = self.silent_wealth_inputs.anchor_distance
+
+        # self.start_time = BTCController.BTC_PAXOS_START_TIME
+        # self.stop_time = BTCController.BTC_PAXOS_END_TIME
+        # self.close_time = BTCController.BTC_PAXOS_CLOSE_TIME
 
     def validate(self):
         return True
@@ -31,32 +40,40 @@ class BTCController(Controller):
     def run(self):
         ib = super()._connect_to_ib(self.silent_wealth_inputs.account)
 
-        stock = Contract(secType='CRYPTO', symbol='BTC', exchange='PAXOS', currency='USD')
+        contract = Contract(secType='CRYPTO', symbol='BTC', exchange='PAXOS', currency='USD')
 
-        ib.qualifyContracts(stock)
-        ib.reqMktData(stock)
+        ib.qualifyContracts(contract)
+        ib.reqMktData(contract)
         ib.sleep(2)
-        ticker = ib.ticker(stock)
+        ticker = ib.ticker(contract)
+
+        if not ticker.last or not ticker.close:
+            print("Error: Cannot determine market price. Possible connection issue.")
+            ib.disconnect()
+            exit()
 
         schedule.every(self.frame_size).minutes.do(self._scheduled_task,
-                                              ib,
-                                              stock,
-                                              self.ticker_name,
-                                              self.quantity,
-                                              self.frame_size,
-                                              self.stop_loss_percent,
-                                              self.dollar_amount,
-                                              self.start_time,
-                                              self.stop_time,
-                                              self.close_time,
-                                              self.ema_short,
-                                              self.ema_medium,
-                                              self.ema_long,
-                                              self.vwap,
-                                              self.rsi_period,
-                                              self.take_profit,
-                                              self.limit_order,
-                                              self.anchor_distance)
+                                                   ib,
+                                                   contract,
+                                                   self.ticker_name,
+                                                   None,
+                                                   self.frame_size,
+                                                   self.dollar_amount,
+                                                   None,
+                                                   None,
+                                                   None,
+                                                   self.ema_short,
+                                                   self.ema_medium,
+                                                   self.ema_long,
+                                                   self.vwap,
+                                                   self.rsi)
 
-        ib.disconnect()
-        exit()
+        try:
+            while True:
+                schedule.run_pending()
+                time.sleep(1)  # Sleep to prevent CPU overuse
+        except Exception as e:
+            print(f"Scheduler stopped due to unknown error. {e}")
+            traceback.print_exc()
+        finally:
+            ib.disconnect()

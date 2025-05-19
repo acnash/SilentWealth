@@ -12,7 +12,7 @@ class ExpMovingAverage:
             self.historical_data = ib.reqHistoricalData(
                 stock,
                 endDateTime='',
-                durationStr='5 D',
+                durationStr='1 D',
                 barSizeSetting=f'{str(frame_size)} {unit}',
                 whatToShow='MIDPOINT',
                 useRTH=True
@@ -22,7 +22,7 @@ class ExpMovingAverage:
             self.historical_data = ib.reqHistoricalData(
                 stock,
                 endDateTime='',
-                durationStr='5 D',
+                durationStr='1 D',
                 barSizeSetting=f'{str(frame_size)} {unit}',
                 whatToShow='TRADES',  # Options: TRADES, MIDPOINT, etc.
                 useRTH=True
