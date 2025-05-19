@@ -8,9 +8,6 @@ from src.controllers.controller import Controller
 
 
 class BTCController(Controller):
-    # BTC_PAXOS_START_TIME = "08:10"
-    # BTC_PAXOS_END_TIME = "20:00"
-    # BTC_PAXOS_CLOSE_TIME = "20:30"
 
     def __init__(self, silent_wealth_inputs):
         super().__init__()
@@ -29,10 +26,6 @@ class BTCController(Controller):
         self.vwap = self.silent_wealth_inputs.vwap
         self.rsi = self.silent_wealth_inputs.rsi
         self.anchor_distance = self.silent_wealth_inputs.anchor_distance
-
-        # self.start_time = BTCController.BTC_PAXOS_START_TIME
-        # self.stop_time = BTCController.BTC_PAXOS_END_TIME
-        # self.close_time = BTCController.BTC_PAXOS_CLOSE_TIME
 
     def validate(self):
         return True
@@ -73,7 +66,7 @@ class BTCController(Controller):
                 schedule.run_pending()
                 time.sleep(1)  # Sleep to prevent CPU overuse
         except Exception as e:
-            print(f"Scheduler stopped due to unknown error. {e}")
+            print(f"Error: Scheduler stopped due to unknown error. {e}")
             traceback.print_exc()
         finally:
             ib.disconnect()

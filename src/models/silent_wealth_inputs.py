@@ -28,7 +28,7 @@ class SilentWealthInputs:
             print(f"...on the {self.exchange} exchange.")
             self.frame_size = stock["frame_size"]
             print(f"...resolution size {self.frame_size}.")
-            if self.ticker_name == "BTC":
+            if self.ticker_name == "BTC" or self.ticker_name == "SOL" or self.ticker_name == "ETH":
                 self.dollar_amount = stock["dollar_amount"]
                 print(f"...trading with {self.dollar_amount} for bitcoin.")
             else:
@@ -70,8 +70,8 @@ class SilentWealthInputs:
             print(f"...setting EMA long {self.ema_long}.")
             self.vwap = monitor_conditions.get("vwap", 9)
             print(f"...setting vwap {self.vwap}.")
-            self.rsi_period = monitor_conditions.get("rsi_period", 14)
-            print(f"...setting RSI {self.rsi_period}.")
+            self.rsi = monitor_conditions.get("rsi", 14)
+            print(f"...setting RSI {self.rsi}.")
             self.anchor_distance = monitor_conditions.get("anchor_distance", 0)
             print(f"...setting anchor distance {self.anchor_distance}.\n")
         except KeyError:

@@ -19,7 +19,7 @@ def main():
 
     silent_wealth_inputs = SilentWealthInputs(yaml_inputs)
 
-    if silent_wealth_inputs.ticker_name == "BTC":
+    if silent_wealth_inputs.ticker_name == "BTC" or silent_wealth_inputs.ticker_name == "SOL" or silent_wealth_inputs.ticker_name == "ETH":
         controller = BTCController(silent_wealth_inputs)
     else:
         controller = StockController(silent_wealth_inputs)

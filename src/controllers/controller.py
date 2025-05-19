@@ -13,17 +13,17 @@ class Controller(ABC):
     PAPER_PORT = 7497
     LIVE_PORT = 7496
 
-    LSE_START_TIME = "08:10"
-    LSE_END_TIME = "16:00"
-    LSE_CLOSE_TIME = "16:10"
+    # LSE_START_TIME = "08:10"
+    # LSE_END_TIME = "16:00"
+    # LSE_CLOSE_TIME = "16:10"
 
-    NYSE_START_TIME = "14:30"
-    NYSE_END_TIME = "20:30"
-    NYSE_CLOSE_TIME = "20:58"
+    # NYSE_START_TIME = "14:30"
+    # NYSE_END_TIME = "20:30"
+    # NYSE_CLOSE_TIME = "20:58"
 
-    BTC_PAXOS_START_TIME = "08:10"
-    BTC_PAXOS_END_TIME = "20:00"
-    BTC_PAXOS_CLOSE_TIME = "20:30"
+    # BTC_PAXOS_START_TIME = "08:10"
+    # BTC_PAXOS_END_TIME = "20:00"
+    # BTC_PAXOS_CLOSE_TIME = "20:30"
 
     HOLD = "hold"
     BUY = "buy"
@@ -51,19 +51,19 @@ class Controller(ABC):
             trade = ib.placeOrder(contract, sell_order)
             self.holding_stock = False
 
-    def _sell_market_BTC_order(self, ib, btc_contract):
+    def _sell_market_crypto_order(self, ib, contract, ticker_name):
         if not self.holding_stock:
             return
         else:
             positions = ib.positions()
             # Find the BTC position
-            btc_position = next((pos for pos in positions if pos.contract.symbol == 'BTC'), None)
+            btc_position = next((pos for pos in positions if pos.contract.symbol == ticker_name), None)
 
             if btc_position:
                 btc_quantity = btc_position.position  # Quantity of BTC you hold
-                print(f"You have {btc_quantity} BTC.")
+                print(f"You have {btc_quantity} crypto.")
             else:
-                print("No BTC position found.")
+                print("No crypto position found.")
                 return
 
             # Create a market order to sell all BTC
@@ -75,13 +75,13 @@ class Controller(ABC):
                 sell_order.tif = "IOC"
 
                 # Place the order
-                trade = ib.placeOrder(btc_contract, sell_order)
+                trade = ib.placeOrder(contract, sell_order)
                 print(f"Sell order placed: {trade}")
                 self.holding_stock = False
             else:
-                print("No BTC to sell or invalid position.")
+                print("No crypto to sell or invalid position.")
 
-    def _place_market_BTC_order(self, ib, contract, dollar_amount):
+    def _place_market_crypto_order(self, ib, contract, dollar_amount, ticker_name):
         if not self.holding_stock:
             share_ticker = ib.reqMktData(contract, '', False, False)
             ib.sleep(2)
@@ -97,14 +97,8 @@ class Controller(ABC):
             order.tif = "IOC"
 
             trade = ib.placeOrder(contract, order)
+            self.holding_stock = True
 
-            if trade.fills:
-                fill_price = trade.fills[0].execution.price
-                print(f"Trade filled at {fill_price} price per share")
-                self.holding_stock = True
-            else:
-                print("Trade did not fill.")
-                self.holding_stock = False
 
     def _place_market_order(self, ib,
                             contract,
@@ -147,9 +141,10 @@ class Controller(ABC):
 
         current_time = datetime.now().time()
 
-        if ((datetime.strptime(start_time, "%H:%M").time() <= current_time <= datetime.strptime(stop_time,
-                                                                                                "%H:%M").time())
-                or (not start_time and not stop_time)):
+        start = datetime.strptime(start_time, "%H:%M").time() if start_time else None
+        stop = datetime.strptime(stop_time, "%H:%M").time() if stop_time else None
+
+        if (start and stop and start <= current_time <= stop) or (not start and not stop):
             action = self._silent_wealth_start(ib,
                                                contract,
                                                frame_size,
@@ -163,13 +158,13 @@ class Controller(ABC):
             if action == Controller.HOLD:
                 pass
             elif action == Controller.SELL:
-                if ticker_name == "BTC":
-                    self._sell_market_BTC_order(ib, contract)
+                if ticker_name == "BTC" or ticker_name == "SOL" or ticker_name == "ETH":
+                    self._sell_market_crypto_order(ib, contract, ticker_name)
                 else:
                     self._sell_market_order(ib, ticker_name, quantity)
             elif action == Controller.BUY:
-                if ticker_name == "BTC":
-                    self._place_market_BTC_order(ib, contract, dollar_amount)
+                if ticker_name == "BTC" or ticker_name == "SOL" or ticker_name == "ETH":
+                    self._place_market_crypto_order(ib, contract, dollar_amount, ticker_name)
                 else:
                     self._place_market_order(ib, contract, quantity, ticker_name)
         else:
@@ -242,17 +237,17 @@ class Controller(ABC):
                 # print(f"The number of places from the last entry is: {places_from_last}")
 
         if vwap == 0 and ema_long > 0 and rsi > 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long and (50 < rsi_value <= 70):
+            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and (50 < rsi_value <= 70):
                 print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  RSI: {rsi_value:.3f}")
+                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.BUY
             elif ema_short_value <= ema_medium_value:
                 print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  RSI: {rsi_value:.3f}")
+                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.SELL
             else:
                 print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  RSI: {rsi_value:.3f}")
+                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.HOLD
 
         elif ema_long == 0 and vwap > 0 and rsi == 0:
@@ -270,31 +265,31 @@ class Controller(ABC):
                 return Controller.HOLD
 
         elif ema_long > 0 and vwap == 0 and rsi == 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long:
+            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value:
                 print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}")
+                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}")
                 return Controller.BUY
             elif ema_short_value <= ema_medium_value:
                 print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}")
+                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}")
                 return Controller.SELL
             else:
                 print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}")
+                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}")
                 return Controller.HOLD
 
         elif ema_long > 0 and vwap > 0 and rsi == 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long and ema_short > vwap_value:
+            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value:
                 print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  vwap: {vwap_value:.3f}")
+                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}")
                 return Controller.BUY
             elif ema_short_value <= ema_medium_value:
                 print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  vwap: {vwap_value:.3f}")
+                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}")
                 return Controller.SELL
             else:
                 print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  vwap: {vwap_value:.3f}")
+                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}")
                 return Controller.HOLD
 
         elif ema_long == 0 and vwap == 0 and rsi > 0:
@@ -340,18 +335,18 @@ class Controller(ABC):
                 return Controller.HOLD
 
         else:  # This is for all conditions
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long and ema_short_value > vwap_value and (
+            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value and (
                     rsi_value > 50 and rsi_value <= 70):
                 print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.BUY
             elif ema_short_value <= ema_medium_value:
                 print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.SELL
             else:
                 print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
+                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.HOLD
 
     @abstractmethod
