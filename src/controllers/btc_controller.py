@@ -26,6 +26,7 @@ class BTCController(Controller):
         self.vwap = self.silent_wealth_inputs.vwap
         self.rsi = self.silent_wealth_inputs.rsi
         self.anchor_distance = self.silent_wealth_inputs.anchor_distance
+        self.output_data = self.silent_wealth_inputs.output_data
 
     def validate(self):
         return True
@@ -59,7 +60,8 @@ class BTCController(Controller):
                                                    self.ema_medium,
                                                    self.ema_long,
                                                    self.vwap,
-                                                   self.rsi)
+                                                   self.rsi,
+                                                   self.output_data)
 
         try:
             while True:

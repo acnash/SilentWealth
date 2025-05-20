@@ -89,12 +89,14 @@ class Controller(ABC):
             btc_quantity = dollar_amount / btc_price
             btc_quantity = round(btc_quantity, 8)
 
-            order = LimitOrder(
-                action='BUY',  # 'BUY' to purchase BTC
-                totalQuantity=btc_quantity,  # Specify the calculated BTC quantity
-                lmtPrice=btc_price  # Set limit price to 0 (market-like)
-            )
-            order.tif = "IOC"
+            order = MarketOrder(Controller.BUY, btc_quantity)
+
+            #order = LimitOrder(
+            #    action='BUY',  # 'BUY' to purchase BTC
+            #    totalQuantity=btc_quantity,  # Specify the calculated BTC quantity
+            #    lmtPrice=btc_price  # Set limit price to 0 (market-like)
+            #)
+            #order.tif = "IOC"
 
             trade = ib.placeOrder(contract, order)
             self.holding_stock = True
@@ -137,7 +139,8 @@ class Controller(ABC):
                         ema_medium,
                         ema_long,
                         vwap,
-                        rsi):
+                        rsi,
+                        output_data):
 
         current_time = datetime.now().time()
 
@@ -153,7 +156,8 @@ class Controller(ABC):
                                                ema_medium,
                                                ema_long,
                                                vwap,
-                                               rsi)
+                                               rsi,
+                                               output_data)
 
             if action == Controller.HOLD:
                 pass
@@ -194,9 +198,10 @@ class Controller(ABC):
                              ema_medium,
                              ema_long,
                              vwap,
-                             rsi):
+                             rsi,
+                             output_data):
 
-        ema = ExpMovingAverage(ib, contract, frame_size, ticker_name)
+        ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
 
         df_ema_short = ema.calculate_exp_moving_average(ema_short)
         ema_short_value = df_ema_short[f"{ema_short}_day_EMA"].iloc[-1]

@@ -1,18 +1,21 @@
 import pandas as pd
-
+from pathlib import Path
 
 class ExpMovingAverage:
 
-    def __init__(self, ib, stock, frame_size, stock_name):
+    def __init__(self, ib, stock, frame_size, stock_name, output_data):
+        self.output_data = output_data
+        self.frame_size = frame_size
+
         if frame_size == 1:
             unit = "min"
         elif frame_size > 1:
             unit = "mins"
-        if stock_name == "BTC":
+        if stock_name == "BTC" or stock_name == "ETH" or stock_name == "SOL":
             self.historical_data = ib.reqHistoricalData(
                 stock,
                 endDateTime='',
-                durationStr='1 D',
+                durationStr='10 D',
                 barSizeSetting=f'{str(frame_size)} {unit}',
                 whatToShow='MIDPOINT',
                 useRTH=True
@@ -55,6 +58,16 @@ class ExpMovingAverage:
             # Ensure dates are in proper datetime format and sorted
             df['date'] = pd.to_datetime(df['date'])
             df = df.sort_values('date')
+
+            if self.output_data:
+                filepath = Path(self.output_data)
+                if filepath.suffix == '':
+                    filepath = filepath.with_suffix(".dat")
+
+                # Step 2: Modify the file name to include '_exp_20' before the extension
+                new_filename = filepath.stem + f"_frame_size_{self.frame_size}" + filepath.suffix
+                new_filepath = filepath.with_name(new_filename)
+                df.to_csv(new_filepath, index=False)
 
             df[f"{days}_day_EMA"] = df['close'].ewm(span=days, adjust=False, min_periods=days).mean()
 

@@ -76,3 +76,7 @@ class SilentWealthInputs:
             print(f"...setting anchor distance {self.anchor_distance}.\n")
         except KeyError:
             print("Error: incorrect entry in monitor_conditions. Exiting.")
+
+        self.debug = yaml_inputs.get("debug")
+        if self.debug:
+            self.output_data = self.debug["output_data"]

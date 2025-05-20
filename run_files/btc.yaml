@@ -1,5 +1,5 @@
 stock:
-  ticker_name: SOL
+  ticker_name: BTC
   exchange: PAXOS
   dollar_amount: 1000
   frame_size: 1
@@ -13,7 +13,9 @@ buy_sell_conditions:
 monitor_conditions:
   ema_short: 9
   ema_medium: 20
-  ema_long: 200
+  ema_long: 0
   vwap: 0
   rsi: 0
   anchor_distance: 0
+debug:
+  output_data: ~/pythonProject/IB/temp/history.dat
