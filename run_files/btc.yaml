@@ -2,7 +2,7 @@ stock:
   ticker_name: BTC
   exchange: PAXOS
   dollar_amount: 1000
-  frame_size: 1
+  frame_size: 5
 account_data:
   account: paper
 buy_sell_conditions:

@@ -68,3 +68,22 @@ Use the following minimal examples and options provided above to execute the sof
 **COMMISSION:** $7.768246400705687
 
 **NET PROFIT AFTER COMMISSION:** $79.59668161340804 
+
+### 5 min windows over 10 days
+- Short: 18
+- Medium: 20
+- Long: 100
+- RSI duration: 18
+- RSI top: 75
+- RSI bottom: 40
+- VWAP: True
+- Initial investment: $1000
+- Commission pot: $200
+
+
+**TOTAL PROFIT/LOSS:** $52.95866893875859
+
+**COMMISSION:** $12.84793344693793
+
+**NET PROFIT AFTER COMMISSION:** $40.11073549182066 
+
