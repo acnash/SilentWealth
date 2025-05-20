@@ -48,3 +48,23 @@ Use the following minimal examples and options provided above to execute the sof
 
 ### ARCA ETF
 `--ticker_name SOXS --exchange ARCA --quantity 100 --frame_size 1 --account paper --limit_order`
+
+# Benchmarking
+
+## BTC
+### 1 min windows over 10 days
+- Short: 9
+- Medium: 20
+- Long: 100
+- RSI duration: 18
+- RSI top: 80
+- RSI bottom: 40
+- VWAP: True
+- Initial investment: $1000
+- Commission pot: $200
+
+**TOTAL PROFIT/LOSS:** $87.36492801411373
+
+**COMMISSION:** $7.768246400705687
+
+**NET PROFIT AFTER COMMISSION:** $79.59668161340804 
