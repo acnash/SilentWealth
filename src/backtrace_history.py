@@ -3,7 +3,9 @@ import os
 import pandas as pd
 import csv
 
-def run_bencharmk(file_path, short, medium, long, rsi_duration, rsi_top, rsi_bottom, use_vwap, atr_period, investment, com_pot, file):
+
+def run_benchmark(file_path, short, medium, long, rsi_duration, rsi_top, rsi_bottom, use_vwap, atr_period, investment,
+                  com_pot, file):
     df = pd.read_csv(file_path)
 
     df[f"{short}_day_EMA"] = df['close'].ewm(span=short, adjust=False, min_periods=short).mean()
@@ -15,7 +17,9 @@ def run_bencharmk(file_path, short, medium, long, rsi_duration, rsi_top, rsi_bot
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
-    # calculate RSI
+    # calculate RSI - set to 0 if None (considered as not being used)
+    if not rsi_duration:
+        rsi_duration = 0
     avg_gain = gain.rolling(window=rsi_duration, min_periods=rsi_duration).mean()
     avg_loss = loss.rolling(window=rsi_duration, min_periods=rsi_duration).mean()
     rs = avg_gain / avg_loss
@@ -72,7 +76,7 @@ def run_bencharmk(file_path, short, medium, long, rsi_duration, rsi_top, rsi_bot
             vwap = 0
 
         # this prevent RSI impacting decisions.
-        if not rsi_duration:
+        if rsi_duration == 0:
             if ema_short > ema_medium and not seen and close > vwap and ema_short > ema_long and volatile:
                 # avoid buying unless I've seen an initial Sale. This avoids buying halfway up a trend.
                 if first_trade:
@@ -93,11 +97,11 @@ def run_bencharmk(file_path, short, medium, long, rsi_duration, rsi_top, rsi_bot
                     seen = False
                     commission += 3.40 + (profit * 0.05)
         else:
+
             if ema_short > ema_medium and not seen and rsi_bottom < rsi_val < rsi_top and close > vwap and ema_short > ema_long and volatile:
                 # avoid buying unless I've seen an initial Sale. This avoids buying halfway up a trend.
                 if first_trade:
                     continue
-
                 btc_bought = initial_investment / close
                 seen = True
             elif ema_short <= ema_medium and rsi_val > rsi_top:
@@ -121,6 +125,9 @@ def run_bencharmk(file_path, short, medium, long, rsi_duration, rsi_top, rsi_bot
     print("COMMISSION:", commission)
     print("NET PROFIT AFTER COMMISSION:", net_profit, "\n")
 
+    # set RSI back to None if it's zero
+    if rsi_duration == 0:
+        rsi_duration = None
     writer.writerow([short, medium, long, rsi_duration, rsi_top, rsi_bottom, use_vwap, atr_period, investment, com_pot,
                      total_profit, commission, net_profit])
 
@@ -128,7 +135,7 @@ def run_bencharmk(file_path, short, medium, long, rsi_duration, rsi_top, rsi_bot
 
 
 def run_screen(output_file: str):
-    file = open(output_file, "a")
+    file = open(output_file, "a", newline="")
 
     write_header = not os.path.exists(output_file) or os.stat(output_file).st_size == 0
     if write_header:
@@ -144,6 +151,7 @@ def run_screen(output_file: str):
     rsi_bottom_list = [40, 45, 50]
     atr_list = [9, 12, 14, 18, None]
     vwap_list = [True, False, None]
+    investment_list = [1000.0, 1500.0, 2000.0]
 
     best_profit = 0
     best_short = 0
@@ -154,46 +162,50 @@ def run_screen(output_file: str):
     best_rsi_bottom = 0
     best_vwap = None
     best_atr_duration = 0
+    best_investment = 0
 
-    for short_entry in short_list:
-        for medium_entry in medium_list:
-            for long_entry in long_list:
-                for rsi_entry in rsi_list:
-                    for rsi_top_entry in rsi_top_list:
-                        for rsi_bottom_entry in rsi_bottom_list:
-                            for atr_entry in atr_list:
-                                for vwap_entry in vwap_list:
-                                    print("---------------------------------------------")
-                                    print(f"short: {short_entry}")
-                                    print(f"medium: {medium_entry}")
-                                    print(f"long: {long_entry}")
-                                    print(f"rsi_duration: {rsi_entry}")
-                                    print(f"rsi_top: {rsi_top_entry}")
-                                    print(f"rsi_bottom: {rsi_bottom_entry}")
-                                    print(f"vwap: {vwap_entry}")
-                                    print(f"atr_duration: {atr_entry}")
-                                    profit = run_bencharmk("../temp/history_frame_size_1.dat",
-                                                          short_entry,
-                                                          medium_entry,
-                                                          long_entry,
-                                                          rsi_entry,
-                                                          rsi_top_entry,
-                                                          rsi_bottom_entry,
-                                                          vwap_entry,
-                                                          atr_entry,
-                                                          1000.0,
-                                                          200.0,
-                                                           file)
-                                    if profit > best_profit:
-                                        best_profit = profit
-                                        best_long = long_entry
-                                        best_medium = medium_entry
-                                        best_short = short_entry
-                                        best_rsi_duration = rsi_entry
-                                        best_rsi_top = rsi_top_entry
-                                        best_rsi_bottom = rsi_bottom_entry
-                                        best_atr_duration = atr_entry
-                                        best_vwap = vwap_entry
+    for investment_value in investment_list:
+        for short_entry in short_list:
+            for medium_entry in medium_list:
+                for long_entry in long_list:
+                    for rsi_entry in rsi_list:
+                        for rsi_top_entry in rsi_top_list:
+                            for rsi_bottom_entry in rsi_bottom_list:
+                                for atr_entry in atr_list:
+                                    for vwap_entry in vwap_list:
+                                        print("---------------------------------------------")
+                                        print(f"short: {short_entry}")
+                                        print(f"medium: {medium_entry}")
+                                        print(f"long: {long_entry}")
+                                        print(f"rsi_duration: {rsi_entry}")
+                                        print(f"rsi_top: {rsi_top_entry}")
+                                        print(f"rsi_bottom: {rsi_bottom_entry}")
+                                        print(f"vwap: {vwap_entry}")
+                                        print(f"atr_duration: {atr_entry}")
+                                        print(f"investment_value: {investment_value}")
+                                        profit = run_benchmark("../temp/history_frame_size_1.dat",
+                                                               short_entry,
+                                                               medium_entry,
+                                                               long_entry,
+                                                               rsi_entry,
+                                                               rsi_top_entry,
+                                                               rsi_bottom_entry,
+                                                               vwap_entry,
+                                                               atr_entry,
+                                                               investment_value,
+                                                               200.0,
+                                                               file)
+                                        if profit > best_profit:
+                                            best_profit = profit
+                                            best_long = long_entry
+                                            best_medium = medium_entry
+                                            best_short = short_entry
+                                            best_rsi_duration = rsi_entry
+                                            best_rsi_top = rsi_top_entry
+                                            best_rsi_bottom = rsi_bottom_entry
+                                            best_atr_duration = atr_entry
+                                            best_vwap = vwap_entry
+                                            best_investment = investment_value
 
     file.close()
 
@@ -209,16 +221,20 @@ def run_screen(output_file: str):
     print(f"rsi_bottom: {best_rsi_bottom}")
     print(f"vwap: {best_vwap}")
     print(f"atr_duration: {best_atr_duration}")
+    print(f"investment: {best_investment}")
 
-run_screen("../temp/BTC_1_min.txt")
-#profit = run_bencharmk("../temp/history_frame_size_1.dat",
-#                      14,
-#                      20,
-#                      100,
-#                      18,
-#                      75,
-#                      40,
-#                      True,
-#                      14,
-#                      1000.0,
-#                      200.0)
+
+run_screen("../temp/BTC_1_min_results.txt")
+# file = open("../temp/test.dat", "a", newline="")
+# profit = run_benchmark("../temp/history_frame_size_1.dat",
+#                       9,
+#                       20,
+#                       100,
+#                       18,
+#                       75,
+#                       40,
+#                       True,
+#                       9,
+#                       1000.0,
+#                       200.0,
+#                       file)
