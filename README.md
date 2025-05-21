@@ -53,37 +53,19 @@ Use the following minimal examples and options provided above to execute the sof
 
 ## BTC
 ### 1 min windows over 10 days
-- Short: 9
-- Medium: 20
+- Short: 12
+- Medium: 30
 - Long: 100
-- RSI duration: 18
+- RSI duration: 14
 - RSI top: 80
 - RSI bottom: 40
 - VWAP: True
+- ATR duration: 12
 - Initial investment: $1000
 - Commission pot: $200
 
-**TOTAL PROFIT/LOSS:** $87.36492801411373
+- **TOTAL PROFIT/LOSS:** $
+- **COMMISSION:** $
+- **NET PROFIT AFTER COMMISSION:** $59.724179172215855
 
-**COMMISSION:** $7.768246400705687
-
-**NET PROFIT AFTER COMMISSION:** $79.59668161340804 
-
-### 5 min windows over 10 days
-- Short: 18
-- Medium: 20
-- Long: 100
-- RSI duration: 18
-- RSI top: 75
-- RSI bottom: 40
-- VWAP: True
-- Initial investment: $1000
-- Commission pot: $200
-
-
-**TOTAL PROFIT/LOSS:** $52.95866893875859
-
-**COMMISSION:** $12.84793344693793
-
-**NET PROFIT AFTER COMMISSION:** $40.11073549182066 
 
