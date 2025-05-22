@@ -205,7 +205,7 @@ class Controller(ABC):
         df_ema_short['low_pc'] = (df_ema_short['low'] - df_ema_short['previous_close']).abs()
         df_ema_short['tr'] = df_ema_short[['high_low', 'high_pc', 'low_pc']].max(axis=1)
 
-        if atr_period:
+        if atr_period > 0:
             df_ema_short['atr'] = df_ema_short['tr'].rolling(window=atr_period).mean()
             vol_threshold = df_ema_short['atr'].mean()  # or a quantile
             df_ema_short['volatile_enough'] = df_ema_short['atr'] > vol_threshold
@@ -220,147 +220,85 @@ class Controller(ABC):
         if ema_long > 0:
             df_ema_long = ema.calculate_exp_moving_average(ema_long)
             ema_long_value = df_ema_long[f"{ema_long}_day_EMA"].iloc[-1]
+        else:
+            ema_long_value = 0
 
+        close = df_ema_short["close"].iloc[-1]
         if vwap > 0:
             vwap_obj = VolumeWeightedAverage(df_ema_short)
             df_vwap = vwap_obj.calculate_wva(vwap)
             vwap_value = df_vwap[f"rolling_vwap"].iloc[-1]
-        else:
-            vwap_value = 0
+            if close > vwap_value:
+                return Controller.HOLD
 
         if rsi > 0:
             rsi_obj = RSI(df_ema_short)
             rsi_value = rsi_obj.calculate_rsi(rsi)
+        else:
+            rsi_value = 0
 
-        date_of_action = df_ema_short["date"].iloc[-1]
+        if ema_short_value <= ema_medium_value:
+            return Controller.SELL
 
-        # Should I attempt to buy based on where the 9 cross 20 occurred?
-        # Find the index of the last entry where SHORT["short"] >= MEDIUM["medium"]
-        # We iterate backwards to find the most recent match
-        places_from_last = 0
-
-        for i in range(len(df_ema_short) - 1, -1, -1):
-            temp_short = df_ema_short[f"{ema_short}_day_EMA"][i]
-            temp_medium = df_ema_medium[f"{ema_medium}_day_EMA"][i]
-            if temp_short > temp_medium:
-                # Calculate the number of places from the last entry
-                # places_from_last = places_from_last + len(df_ema_short) - 1 - i
-                places_from_last = places_from_last + 1
-                # print(f"The value in 'short' is {temp_short:.3f} > 'medium' {temp_medium:.3f} at index {i}.")
-                # print(f"The number of places from the last entry is: {places_from_last}")
-
-        if vwap == 0 and ema_long > 0 and rsi > 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and (rsi_bottom < rsi_value <= rsi_top) and vol_threshold:
-                print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.BUY
-            elif ema_short_value <= ema_medium_value:
-                print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.SELL
+        if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
+            if rsi_value > 0:
+                if rsi_bottom < rsi_value <= rsi_top:
+                    return Controller.BUY
+                else:
+                    return Controller.HOLD
             else:
-                print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.HOLD
-
-        elif ema_long == 0 and vwap > 0 and rsi == 0  and vol_threshold:
-            if ema_short_value > ema_medium_value and ema_short_value > vwap_value:
-                print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  vwap: {vwap_value:.3f}")
                 return Controller.BUY
-            elif ema_short_value <= ema_medium_value:
-                print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  vwap: {vwap_value:.3f}")
-                return Controller.SELL
-            else:
-                print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  vwap: {vwap_value:.3f}")
-                return Controller.HOLD
+        else:
+            return Controller.HOLD
 
-        elif ema_long > 0 and vwap == 0 and rsi == 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value  and vol_threshold:
-                print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}")
-                return Controller.BUY
-            elif ema_short_value <= ema_medium_value:
-                print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}")
-                return Controller.SELL
-            else:
-                print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}")
-                return Controller.HOLD
-
-        elif ema_long > 0 and vwap > 0 and rsi == 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value  and vol_threshold:
-                print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}")
-                return Controller.BUY
-            elif ema_short_value <= ema_medium_value:
-                print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}")
-                return Controller.SELL
-            else:
-                print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}")
-                return Controller.HOLD
-
-        elif ema_long == 0 and vwap == 0 and rsi > 0:
-            if ema_short_value > ema_medium_value and (rsi_bottom < rsi_value <= rsi_top)  and vol_threshold:
-                print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.BUY
-            elif ema_short_value <= ema_medium_value:
-                print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.SELL
-            else:
-                print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.HOLD
-
-        elif ema_long == 0 and vwap == 0 and rsi == 0  and vol_threshold:  # only the short and medium EMA
-            if ema_short_value > ema_medium_value:
-                print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}")
-                return Controller.BUY
-            elif ema_short <= ema_medium:
-                print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}")
-                return Controller.SELL
-            else:
-                print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}")
-                return Controller.HOLD
-
-        elif ema_long == 0 and vwap > 0 and rsi > 0:
-            if ema_short_value > ema_medium_value and ema_short_value > vwap_value and (rsi_bottom < rsi_value <= rsi_top) and vol_threshold:
-                print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.BUY
-            elif ema_short_value <= ema_medium_value:
-                print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.SELL
-            else:
-                print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.HOLD
-
-        else:  # This is for all conditions
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value and (
-                    rsi_value > rsi_bottom and rsi_value <= rsi_top) and vol_threshold:
-                print(
-                    f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.BUY
-            elif ema_short_value <= ema_medium_value:
-                print(
-                    f"SELL signal (if holding) - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.SELL
-            else:
-                print(
-                    f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
-                return Controller.HOLD
+        # if vwap == 0 and ema_long > 0 and rsi > 0:
+        #     if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and (rsi_bottom < rsi_value <= rsi_top) and atr_value:
+        #         return Controller.BUY
+        #     else:
+        #         return Controller.HOLD
+        #
+        # elif ema_long == 0 and vwap > 0 and rsi == 0 and atr_value:
+        #     if ema_short_value > ema_medium_value and ema_short_value > vwap_value:
+        #         return Controller.BUY
+        #     else:
+        #         return Controller.HOLD
+        #
+        # elif ema_long > 0 and vwap == 0 and rsi == 0:
+        #     if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
+        #         return Controller.BUY
+        #     else:
+        #         return Controller.HOLD
+        #
+        # elif ema_long > 0 and vwap > 0 and rsi == 0:
+        #     if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value and atr_value:
+        #         return Controller.BUY
+        #     else:
+        #         return Controller.HOLD
+        #
+        # elif ema_long == 0 and vwap == 0 and rsi > 0:
+        #     if ema_short_value > ema_medium_value and (rsi_bottom < rsi_value <= rsi_top)  and atr_value:
+        #         return Controller.BUY
+        #     else:
+        #         return Controller.HOLD
+        #
+        # elif ema_long == 0 and vwap == 0 and rsi == 0  and atr_value:  # only the short and medium EMA
+        #     if ema_short_value > ema_medium_value:
+        #         return Controller.BUY
+        #     else:
+        #         return Controller.HOLD
+        #
+        # elif ema_long == 0 and vwap > 0 and rsi > 0:
+        #     if ema_short_value > ema_medium_value and ema_short_value > vwap_value and (rsi_bottom < rsi_value <= rsi_top) and atr_value:
+        #         return Controller.BUY
+        #     else:
+        #         return Controller.HOLD
+        #
+        # else:
+        #     if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value and (
+        #             rsi_value > rsi_bottom and rsi_value <= rsi_top) and atr_value:
+        #         return Controller.BUY
+        #     else:
+        #         return Controller.HOLD
 
     @abstractmethod
     def validate(self):
