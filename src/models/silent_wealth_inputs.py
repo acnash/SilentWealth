@@ -100,8 +100,8 @@ class SilentWealthInputs:
             print(f"...setting RSI top condition {self.rsi_top}.")
             self.rsi_bottom = monitor_conditions.get("rsi_bottom", 0)
             print(f"...setting RSI bottom condition {self.rsi_bottom}.")
-            self.atr = monitor_conditions.get("atr", 0)
-            print(f"...setting ATR duration {self.atr}.")
+            self.atr_period = monitor_conditions.get("atr", 0)
+            print(f"...setting ATR duration {self.atr_period}.")
             self.anchor_distance = monitor_conditions.get("anchor_distance", 0)
             print(f"...setting anchor distance {self.anchor_distance}.\n")
         except KeyError:

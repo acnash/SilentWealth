@@ -11,6 +11,10 @@ class StockController(Controller):
     NYSE_END_TIME = "20:30"
     NYSE_CLOSE_TIME = "20:58"
 
+    LSE_START_TIME = "08:10"
+    LSE_END_TIME = "16:00"
+    LSE_CLOSE_TIME = "16:10"
+
     def __init__(self, silent_wealth_inputs):
         super().__init__()
         self.silent_wealth_inputs = silent_wealth_inputs

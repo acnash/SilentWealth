@@ -31,7 +31,10 @@ class BTCController(Controller):
         self.ema_long = self.silent_wealth_inputs.ema_long
         self.vwap = self.silent_wealth_inputs.vwap
         self.rsi = self.silent_wealth_inputs.rsi
+        self.rsi_top = self.silent_wealth_inputs.rsi_top
+        self.rsi_bottom = self.silent_wealth_inputs.rsi_bottom
         self.anchor_distance = self.silent_wealth_inputs.anchor_distance
+        self.atr_period = self.silent_wealth_inputs.atr_period
         self.output_data = self.silent_wealth_inputs.output_data
 
     def validate(self):
@@ -67,6 +70,9 @@ class BTCController(Controller):
                                                    self.ema_long,
                                                    self.vwap,
                                                    self.rsi,
+                                                   self.rsi_top,
+                                                   self.rsi_bottom,
+                                                   self.atr_period,
                                                    self.output_data)
 
         try:

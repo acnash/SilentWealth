@@ -11,17 +11,6 @@ from src.monitor_tools.volume_weighted_average import VolumeWeightedAverage
 
 class Controller(ABC):
 
-
-    # LSE_START_TIME = "08:10"
-    # LSE_END_TIME = "16:00"
-    # LSE_CLOSE_TIME = "16:10"
-
-
-
-    # BTC_PAXOS_START_TIME = "08:10"
-    # BTC_PAXOS_END_TIME = "20:00"
-    # BTC_PAXOS_CLOSE_TIME = "20:30"
-
     HOLD = "hold"
     BUY = "buy"
     SELL = "sell"
@@ -32,10 +21,6 @@ class Controller(ABC):
     def _connect_to_ib(self, port):
         client_id = random.randint(1, 9999)
         ib = IB()
-        #if account == "paper":
-        #    ib.connect('127.0.0.1', Controller.PAPER_PORT, clientId=client_id)
-        #elif account == "live":
-        #    ib.connect('127.0.0.1', Controller.LIVE_PORT, clientId=client_id)
         ib.connect('127.0.0.1', port, clientId=client_id)
 
         return ib
@@ -138,6 +123,9 @@ class Controller(ABC):
                         ema_long,
                         vwap,
                         rsi,
+                        rsi_top,
+                        rsi_bottom,
+                        atr_period,
                         output_data):
 
         current_time = datetime.now().time()
@@ -155,6 +143,9 @@ class Controller(ABC):
                                                ema_long,
                                                vwap,
                                                rsi,
+                                               rsi_top,
+                                               rsi_bottom,
+                                               atr_period,
                                                output_data)
 
             if action == Controller.HOLD:
@@ -197,12 +188,31 @@ class Controller(ABC):
                              ema_long,
                              vwap,
                              rsi,
+                             rsi_top,
+                             rsi_bottom,
+                             atr_period,
                              output_data):
 
         ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
 
         df_ema_short = ema.calculate_exp_moving_average(ema_short)
         ema_short_value = df_ema_short[f"{ema_short}_day_EMA"].iloc[-1]
+
+        # calculate the Average True Range
+        df_ema_short['previous_close'] = df_ema_short['close'].shift(1)
+        df_ema_short['high_low'] = df_ema_short['high'] - df_ema_short['low']
+        df_ema_short['high_pc'] = (df_ema_short['high'] - df_ema_short['previous_close']).abs()
+        df_ema_short['low_pc'] = (df_ema_short['low'] - df_ema_short['previous_close']).abs()
+        df_ema_short['tr'] = df_ema_short[['high_low', 'high_pc', 'low_pc']].max(axis=1)
+
+        if atr_period:
+            df_ema_short['atr'] = df_ema_short['tr'].rolling(window=atr_period).mean()
+            vol_threshold = df_ema_short['atr'].mean()  # or a quantile
+            df_ema_short['volatile_enough'] = df_ema_short['atr'] > vol_threshold
+        else:
+            # always set True so this executes
+            df_ema_short['volatile_enough'] = True
+        atr_value = df_ema_short["volatile_enough"].iloc[-1]
 
         df_ema_medium = ema.calculate_exp_moving_average(ema_medium)
         ema_medium_value = df_ema_medium[f"{ema_medium}_day_EMA"].iloc[-1]
@@ -240,7 +250,7 @@ class Controller(ABC):
                 # print(f"The number of places from the last entry is: {places_from_last}")
 
         if vwap == 0 and ema_long > 0 and rsi > 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and (50 < rsi_value <= 70):
+            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and (rsi_bottom < rsi_value <= rsi_top) and vol_threshold:
                 print(
                     f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.BUY
@@ -253,7 +263,7 @@ class Controller(ABC):
                     f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.HOLD
 
-        elif ema_long == 0 and vwap > 0 and rsi == 0:
+        elif ema_long == 0 and vwap > 0 and rsi == 0  and vol_threshold:
             if ema_short_value > ema_medium_value and ema_short_value > vwap_value:
                 print(
                     f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  vwap: {vwap_value:.3f}")
@@ -268,7 +278,7 @@ class Controller(ABC):
                 return Controller.HOLD
 
         elif ema_long > 0 and vwap == 0 and rsi == 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value:
+            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value  and vol_threshold:
                 print(
                     f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}")
                 return Controller.BUY
@@ -282,7 +292,7 @@ class Controller(ABC):
                 return Controller.HOLD
 
         elif ema_long > 0 and vwap > 0 and rsi == 0:
-            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value:
+            if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value  and vol_threshold:
                 print(
                     f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}")
                 return Controller.BUY
@@ -296,7 +306,7 @@ class Controller(ABC):
                 return Controller.HOLD
 
         elif ema_long == 0 and vwap == 0 and rsi > 0:
-            if ema_short_value > ema_medium_value and (50 < rsi_value <= 70):
+            if ema_short_value > ema_medium_value and (rsi_bottom < rsi_value <= rsi_top)  and vol_threshold:
                 print(
                     f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.BUY
@@ -309,7 +319,7 @@ class Controller(ABC):
                     f"HOLD signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.HOLD
 
-        elif ema_long == 0 and vwap == 0 and rsi == 0:  # only the short and medium EMA
+        elif ema_long == 0 and vwap == 0 and rsi == 0  and vol_threshold:  # only the short and medium EMA
             if ema_short_value > ema_medium_value:
                 print(
                     f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}")
@@ -324,7 +334,7 @@ class Controller(ABC):
                 return Controller.HOLD
 
         elif ema_long == 0 and vwap > 0 and rsi > 0:
-            if ema_short_value > ema_medium_value and ema_short_value > vwap_value and (50 < rsi_value <= 70):
+            if ema_short_value > ema_medium_value and ema_short_value > vwap_value and (rsi_bottom < rsi_value <= rsi_top) and vol_threshold:
                 print(
                     f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.BUY
@@ -339,7 +349,7 @@ class Controller(ABC):
 
         else:  # This is for all conditions
             if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and ema_short_value > vwap_value and (
-                    rsi_value > 50 and rsi_value <= 70):
+                    rsi_value > rsi_bottom and rsi_value <= rsi_top) and vol_threshold:
                 print(
                     f"BUY signal - {date_of_action} -- ema_short: {ema_short_value:.3f}  ema_medium: {ema_medium_value:.3f}  ema_long: {ema_long_value:.3f}  vwap: {vwap_value:.3f}  RSI: {rsi_value:.3f}")
                 return Controller.BUY
