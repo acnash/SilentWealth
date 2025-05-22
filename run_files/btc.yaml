@@ -1,10 +1,11 @@
 stock:
   ticker_name: BTC
   exchange: PAXOS
-  dollar_amount: 1000
-  frame_size: 5
+  dollar_amount: 2000
+  frame_size: 1
 account_data:
   account: paper
+  platform: ibg
 buy_sell_conditions:
   purchase_type: limit_order
   stop_loss: 0
@@ -16,6 +17,9 @@ monitor_conditions:
   ema_long: 0
   vwap: 0
   rsi: 0
+  rsi_top: 80
+  rsi_bottom: 40
+  atr: 14
   anchor_distance: 0
 debug:
   output_data: ~/pythonProject/IB/temp/history.dat

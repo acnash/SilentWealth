@@ -3,6 +3,12 @@ from typing import Dict
 
 class SilentWealthInputs:
 
+    TW_PAPER_PORT = 7497
+    TW_LIVE_PORT = 7496
+
+    IBG_PAPER_PORT = 4002
+    IBG_LIVE_PORT = 4001
+
     def __init__(self, yaml_inputs: Dict):
         print("Setting input parameters")
         print("-------------------------------------------------------------------")
@@ -13,7 +19,25 @@ class SilentWealthInputs:
             print("Error: account_data not provided in YAML input file. Exiting.")
             exit()
         self.account = account_data.get("account", "paper")
-        print(f"...using a {self.account} account.\n")
+        self.account = self.account.lower()
+        print(f"...using a {self.account} account.")
+
+        self.platform = account_data.get("platform", "ibg")
+        self.platform = self.platform.lower()
+        print(f"... using platform {self.platform}.")
+
+        if self.platform == "ibg" and self.account == "paper":
+            self.port = SilentWealthInputs.IBG_PAPER_PORT
+        elif self.platform == "ibg" and self.account == "live":
+            self.port = SilentWealthInputs.IBG_LIVE_PORT
+        elif self.platform == "tw" and self.account == "paper":
+            self.port = SilentWealthInputs.TW_PAPER_PORT
+        elif self.platform == "tw" and self.account == "live":
+            self.port = SilentWealthInputs.TW_LIVE_PORT
+        else:
+            print(f"Error: platform {self.platform} and account {self.account} not recognised. Cannot assign port. Exiting.")
+            exit()
+        print(f"...using port {self.port}.\n")
 
         try:
             stock = yaml_inputs["stock"]
@@ -30,7 +54,7 @@ class SilentWealthInputs:
             print(f"...resolution size {self.frame_size}.")
             if self.ticker_name == "BTC" or self.ticker_name == "SOL" or self.ticker_name == "ETH":
                 self.dollar_amount = stock["dollar_amount"]
-                print(f"...trading with {self.dollar_amount} for bitcoin.")
+                print(f"...trading with {self.dollar_amount} for bitcoin.\n")
             else:
                 self.quantity = stock["quantity"]
                 print(f"...trading {self.quantity} amount of stock.\n")
@@ -72,6 +96,12 @@ class SilentWealthInputs:
             print(f"...setting vwap {self.vwap}.")
             self.rsi = monitor_conditions.get("rsi", 14)
             print(f"...setting RSI {self.rsi}.")
+            self.rsi_top = monitor_conditions.get("rsi_top", 0)
+            print(f"...setting RSI top condition {self.rsi_top}.")
+            self.rsi_bottom = monitor_conditions.get("rsi_bottom", 0)
+            print(f"...setting RSI bottom condition {self.rsi_bottom}.")
+            self.atr = monitor_conditions.get("atr", 0)
+            print(f"...setting ATR duration {self.atr}.")
             self.anchor_distance = monitor_conditions.get("anchor_distance", 0)
             print(f"...setting anchor distance {self.anchor_distance}.\n")
         except KeyError:

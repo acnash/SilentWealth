@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import schedule
 import time
 import traceback
@@ -9,10 +11,14 @@ from src.controllers.controller import Controller
 
 class BTCController(Controller):
 
+    BTC_PAXOS_START_TIME = "00:10" # start trading if connected (running)
+    BTC_PAXOS_END_TIME = "23:45"  # force a sale if we're holding, close connection, then exit
+
     def __init__(self, silent_wealth_inputs):
         super().__init__()
         self.silent_wealth_inputs = silent_wealth_inputs
         self.account = self.silent_wealth_inputs.account
+        self.platform = self.silent_wealth_inputs.platform
         self.ticker_name = self.silent_wealth_inputs.ticker_name
         self.exchange = self.silent_wealth_inputs.exchange
         self.frame_size = self.silent_wealth_inputs.frame_size
@@ -32,7 +38,7 @@ class BTCController(Controller):
         return True
 
     def run(self):
-        ib = super()._connect_to_ib(self.silent_wealth_inputs.account)
+        ib = super()._connect_to_ib(self.silent_wealth_inputs.port)
 
         contract = Contract(secType='CRYPTO', symbol=self.ticker_name, exchange=self.exchange, currency='USD')
 
@@ -64,9 +70,17 @@ class BTCController(Controller):
                                                    self.output_data)
 
         try:
+            start_time = datetime.strptime(BTCController.BTC_PAXOS_START_TIME, "%H:%M").time()
+            end_time = datetime.strptime(BTCController.BTC_PAXOS_END_TIME, "%H:%M").time()
             while True:
-                schedule.run_pending()
-                time.sleep(1)  # Sleep to prevent CPU overuse
+                current_time = datetime.now().time()
+                if start_time <= current_time <= end_time:
+                    schedule.run_pending()
+                    time.sleep(1)  # Sleep to prevent CPU overuse
+                else:
+                    print(f"Closing. Outside of trading hours and the {self.platform} platform needs to reset.")
+                    ib.disconnect()
+                    exit()
         except Exception as e:
             print(f"Error: Scheduler stopped due to unknown error. {e}")
             traceback.print_exc()

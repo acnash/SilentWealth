@@ -7,10 +7,15 @@ from src.controllers.controller import Controller
 
 class StockController(Controller):
 
+    NYSE_START_TIME = "14:30"
+    NYSE_END_TIME = "20:30"
+    NYSE_CLOSE_TIME = "20:58"
+
     def __init__(self, silent_wealth_inputs):
         super().__init__()
         self.silent_wealth_inputs = silent_wealth_inputs
         self.account = self.silent_wealth_inputs.account
+        self.platform = self.silent_wealth_inputs.platform
         self.ticker_name = self.silent_wealth_inputs.ticker_name
         self.exchange = self.silent_wealth_inputs.exchange
         self.frame_size = self.silent_wealth_inputs.frame_size

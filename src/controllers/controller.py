@@ -10,16 +10,13 @@ from src.monitor_tools.volume_weighted_average import VolumeWeightedAverage
 
 
 class Controller(ABC):
-    PAPER_PORT = 7497
-    LIVE_PORT = 7496
+
 
     # LSE_START_TIME = "08:10"
     # LSE_END_TIME = "16:00"
     # LSE_CLOSE_TIME = "16:10"
 
-    # NYSE_START_TIME = "14:30"
-    # NYSE_END_TIME = "20:30"
-    # NYSE_CLOSE_TIME = "20:58"
+
 
     # BTC_PAXOS_START_TIME = "08:10"
     # BTC_PAXOS_END_TIME = "20:00"
@@ -32,13 +29,14 @@ class Controller(ABC):
     def __init__(self):
         self.holding_stock = None
 
-    def _connect_to_ib(self, account):
+    def _connect_to_ib(self, port):
         client_id = random.randint(1, 9999)
         ib = IB()
-        if account == "paper":
-            ib.connect('127.0.0.1', Controller.PAPER_PORT, clientId=client_id)
-        elif account == "live":
-            ib.connect('127.0.0.1', Controller.LIVE_PORT, clientId=client_id)
+        #if account == "paper":
+        #    ib.connect('127.0.0.1', Controller.PAPER_PORT, clientId=client_id)
+        #elif account == "live":
+        #    ib.connect('127.0.0.1', Controller.LIVE_PORT, clientId=client_id)
+        ib.connect('127.0.0.1', port, clientId=client_id)
 
         return ib
 
