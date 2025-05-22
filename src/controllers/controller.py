@@ -17,6 +17,7 @@ class Controller(ABC):
 
     def __init__(self):
         self.holding_stock = None
+        self.commission_pot = None
 
     def _connect_to_ib(self, port):
         client_id = random.randint(1, 9999)
@@ -115,9 +116,9 @@ class Controller(ABC):
                         quantity,
                         frame_size,
                         dollar_amount,
+                        commission_pot,
                         start_time,
                         stop_time,
-                        close_time,
                         ema_short,
                         ema_medium,
                         ema_long,
@@ -127,6 +128,9 @@ class Controller(ABC):
                         rsi_bottom,
                         atr_period,
                         output_data):
+
+        if not self.commission_pot:
+            self.commission_pot = commission_pot
 
         current_time = datetime.now().time()
 
@@ -151,11 +155,18 @@ class Controller(ABC):
             if action == Controller.HOLD:
                 pass
             elif action == Controller.SELL:
+                print(f"...selling {ticker_name}.")
+                self.commission_pot = self.commission_pot - 3.4
+                if self.commission_pot <= 0:
+                    print("Ran out of commission. Finishing.")
+                    exit()
+
                 if ticker_name == "BTC" or ticker_name == "SOL" or ticker_name == "ETH":
                     self._sell_market_crypto_order(ib, contract, ticker_name)
                 else:
                     self._sell_market_order(ib, ticker_name, quantity)
             elif action == Controller.BUY:
+                print(f"...buying {ticker_name}.")
                 if ticker_name == "BTC" or ticker_name == "SOL" or ticker_name == "ETH":
                     self._place_market_crypto_order(ib, contract, dollar_amount, ticker_name)
                 else:

@@ -23,6 +23,7 @@ class BTCController(Controller):
         self.exchange = self.silent_wealth_inputs.exchange
         self.frame_size = self.silent_wealth_inputs.frame_size
         self.dollar_amount = self.silent_wealth_inputs.dollar_amount
+        self.commission_pot_child = self.silent_wealth_inputs.commission_pot
         self.purchase_type = self.silent_wealth_inputs.purchase_type
         self.stop_loss = self.silent_wealth_inputs.stop_loss
         self.take_profit = self.silent_wealth_inputs.take_profit
@@ -62,9 +63,9 @@ class BTCController(Controller):
                                                    None,
                                                    self.frame_size,
                                                    self.dollar_amount,
-                                                   None,
-                                                   None,
-                                                   None,
+                                                   self.commission_pot_child,
+                                                   BTCController.BTC_PAXOS_START_TIME,
+                                                   BTCController.BTC_PAXOS_END_TIME,
                                                    self.ema_short,
                                                    self.ema_medium,
                                                    self.ema_long,

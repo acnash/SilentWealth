@@ -2,6 +2,7 @@ stock:
   ticker_name: BTC
   exchange: PAXOS
   dollar_amount: 2000
+  commission_pot: 200
   frame_size: 1
 account_data:
   account: paper
@@ -22,4 +23,4 @@ monitor_conditions:
   atr: 14
   anchor_distance: 0
 debug:
-  output_data: ~/pythonProject/IB/temp/history.dat
+  output_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\something.dat

@@ -24,7 +24,7 @@ class SilentWealthInputs:
 
         self.platform = account_data.get("platform", "ibg")
         self.platform = self.platform.lower()
-        print(f"... using platform {self.platform}.")
+        print(f"...using platform {self.platform}.")
 
         if self.platform == "ibg" and self.account == "paper":
             self.port = SilentWealthInputs.IBG_PAPER_PORT
@@ -52,6 +52,8 @@ class SilentWealthInputs:
             print(f"...on the {self.exchange} exchange.")
             self.frame_size = stock["frame_size"]
             print(f"...resolution size {self.frame_size}.")
+            self.commission_pot = stock.get("commission_pot", 200)
+            print(f"...commission pot size ${self.commission_pot}")
             if self.ticker_name == "BTC" or self.ticker_name == "SOL" or self.ticker_name == "ETH":
                 self.dollar_amount = stock["dollar_amount"]
                 print(f"...trading with {self.dollar_amount} for bitcoin.\n")
