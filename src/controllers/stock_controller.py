@@ -32,7 +32,6 @@ class StockController(Controller):
         self.ema_long = self.silent_wealth_inputs.ema_long
         self.vwap = self.silent_wealth_inputs.vwap
         self.rsi_period = self.silent_wealth_inputs.rsi_period
-        self.anchor_distance = self.silent_wealth_inputs.anchor_distance
         self.output_data = self.silent_wealth_inputs.output_data
 
         if self.silent_wealth_inputs.exchange == "LSE":

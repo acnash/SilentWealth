@@ -94,7 +94,7 @@ class SilentWealthInputs:
             print(f"...setting EMA medium {self.ema_medium}.")
             self.ema_long = monitor_conditions.get("ema_long", 200)
             print(f"...setting EMA long {self.ema_long}.")
-            self.vwap = monitor_conditions.get("vwap", 0)
+            self.vwap = monitor_conditions.get("vwap", True)
             print(f"...setting vwap {self.vwap}.")
             self.rsi = monitor_conditions.get("rsi", 0)
             print(f"...setting RSI {self.rsi}.")
@@ -102,13 +102,22 @@ class SilentWealthInputs:
             print(f"...setting RSI top condition {self.rsi_top}.")
             self.rsi_bottom = monitor_conditions.get("rsi_bottom", 0)
             print(f"...setting RSI bottom condition {self.rsi_bottom}.")
-            self.atr_period = monitor_conditions.get("atr", 0)
-            print(f"...setting ATR duration {self.atr_period}.")
-            self.anchor_distance = monitor_conditions.get("anchor_distance", 0)
-            print(f"...setting anchor distance {self.anchor_distance}.\n")
+            self.atr = monitor_conditions.get("atr", 0)
+            print(f"...setting ATR period {self.atr}")
         except KeyError:
             print("Error: incorrect entry in monitor_conditions. Exiting.")
+            exit()
 
         self.debug = yaml_inputs.get("debug")
         if self.debug:
+            print("Loading debug YAML options.")
             self.output_data = self.debug["output_data"]
+            self.test_mode = self.debug.get("test_mode", False)
+            if self.test_mode:
+                try:
+                    print("...in debug mode.")
+                    self.test_data = self.debug["test_data"]
+                    print(f"...loading test data: {self.test_data}")
+                except KeyError:
+                    print("Error: in test_mode but cannot find test_data YAML entry. Exiting.")
+                    exit()

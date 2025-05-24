@@ -4,6 +4,11 @@ from pathlib import Path
 class ExpMovingAverage:
 
     def __init__(self, ib, stock, frame_size, stock_name, output_data):
+
+        # for testing just build the object of the class
+        if not ib:
+            return
+
         self.output_data = output_data
         self.frame_size = frame_size
 
@@ -15,7 +20,7 @@ class ExpMovingAverage:
             self.historical_data = ib.reqHistoricalData(
                 stock,
                 endDateTime='',
-                durationStr='10 D',
+                durationStr='1 D',
                 barSizeSetting=f'{str(frame_size)} {unit}',
                 whatToShow='MIDPOINT',
                 useRTH=True
@@ -31,7 +36,13 @@ class ExpMovingAverage:
                 useRTH=True
             )
 
-    def calculate_exp_moving_average(self, days):
+    def calculate_exp_moving_average(self, days, test_df=None):
+
+        if isinstance(test_df, pd.DataFrame):
+            test_df[f"{days}_day_EMA"] = test_df['close'].ewm(span=days, adjust=False, min_periods=days).mean()
+            return test_df
+
+
         # Check if historical data was retrieved
         if self.historical_data:
             # Manually extract data into a list of dictionaries

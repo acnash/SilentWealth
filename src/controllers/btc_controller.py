@@ -11,7 +11,7 @@ from src.controllers.controller import Controller
 
 class BTCController(Controller):
 
-    BTC_PAXOS_START_TIME = "00:10" # start trading if connected (running)
+    BTC_PAXOS_START_TIME = "00:01" # start trading if connected (running)
     BTC_PAXOS_END_TIME = "23:45"  # force a sale if we're holding, close connection, then exit
 
     def __init__(self, silent_wealth_inputs):
@@ -34,27 +34,31 @@ class BTCController(Controller):
         self.rsi = self.silent_wealth_inputs.rsi
         self.rsi_top = self.silent_wealth_inputs.rsi_top
         self.rsi_bottom = self.silent_wealth_inputs.rsi_bottom
-        self.anchor_distance = self.silent_wealth_inputs.anchor_distance
-        self.atr_period = self.silent_wealth_inputs.atr_period
+        self.atr = self.silent_wealth_inputs.atr
         self.output_data = self.silent_wealth_inputs.output_data
+        self.test_mode = self.silent_wealth_inputs.test_mode
+        self.test_data = self.silent_wealth_inputs.test_data
+
 
     def validate(self):
         return True
 
     def run(self):
-        ib = super()._connect_to_ib(self.silent_wealth_inputs.port)
+        if self.test_mode:
+            ib = None
+            contract = None
+        else:
+            ib = super()._connect_to_ib(self.silent_wealth_inputs.port)
+            contract = Contract(secType='CRYPTO', symbol=self.ticker_name, exchange=self.exchange, currency='USD')
+            ib.qualifyContracts(contract)
+            ib.reqMktData(contract)
+            ib.sleep(2)
+            ticker = ib.ticker(contract)
 
-        contract = Contract(secType='CRYPTO', symbol=self.ticker_name, exchange=self.exchange, currency='USD')
-
-        ib.qualifyContracts(contract)
-        ib.reqMktData(contract)
-        ib.sleep(2)
-        ticker = ib.ticker(contract)
-
-        if not ticker.last or not ticker.close:
-            print("Error: Cannot determine market price. Possible connection issue.")
-            ib.disconnect()
-            exit()
+            if not ticker.last or not ticker.close:
+                print("Error: Cannot determine market price. Possible connection issue.")
+                ib.disconnect()
+                exit()
 
         schedule.every(self.frame_size).minutes.do(self._scheduled_task,
                                                    ib,
@@ -73,23 +77,50 @@ class BTCController(Controller):
                                                    self.rsi,
                                                    self.rsi_top,
                                                    self.rsi_bottom,
-                                                   self.atr_period,
-                                                   self.output_data)
+                                                   self.atr,
+                                                   self.output_data,
+                                                   self.test_mode,
+                                                   self.test_data)
 
-        try:
-            start_time = datetime.strptime(BTCController.BTC_PAXOS_START_TIME, "%H:%M").time()
-            end_time = datetime.strptime(BTCController.BTC_PAXOS_END_TIME, "%H:%M").time()
-            while True:
-                current_time = datetime.now().time()
-                if start_time <= current_time <= end_time:
-                    schedule.run_pending()
-                    time.sleep(1)  # Sleep to prevent CPU overuse
-                else:
-                    print(f"Closing. Outside of trading hours and the {self.platform} platform needs to reset.")
+        if self.test_mode:
+            # for testing only
+            self._scheduled_task(
+                None,
+                None,
+                self.ticker_name,
+                None,
+                self.frame_size,
+                self.dollar_amount,
+                self.commission_pot_child,
+                BTCController.BTC_PAXOS_START_TIME,
+                BTCController.BTC_PAXOS_END_TIME,
+                self.ema_short,
+                self.ema_medium,
+                self.ema_long,
+                self.vwap,
+                self.rsi,
+                self.rsi_top,
+                self.rsi_bottom,
+                self.atr,
+                self.output_data,
+                self.test_mode,
+                self.test_data)
+        else:
+            try:
+                start_time = datetime.strptime(BTCController.BTC_PAXOS_START_TIME, "%H:%M").time()
+                end_time = datetime.strptime(BTCController.BTC_PAXOS_END_TIME, "%H:%M").time()
+                while True:
+                    current_time = datetime.now().time()
+                    if start_time <= current_time <= end_time:
+                        schedule.run_pending()
+                        time.sleep(1)  # Sleep to prevent CPU overuse
+                    else:
+                        print(f"Closing. Outside of trading hours and the {self.platform} platform needs to reset.")
+                        ib.disconnect()
+                        exit()
+            except Exception as e:
+                print(f"Error: Scheduler stopped due to unknown error. {e}")
+                traceback.print_exc()
+            finally:
+                if not self.test_mode:
                     ib.disconnect()
-                    exit()
-        except Exception as e:
-            print(f"Error: Scheduler stopped due to unknown error. {e}")
-            traceback.print_exc()
-        finally:
-            ib.disconnect()
