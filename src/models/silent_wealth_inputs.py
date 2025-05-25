@@ -103,7 +103,7 @@ class SilentWealthInputs:
             self.rsi_bottom = monitor_conditions.get("rsi_bottom", 0)
             print(f"...setting RSI bottom condition {self.rsi_bottom}.")
             self.atr = monitor_conditions.get("atr", 0)
-            print(f"...setting ATR period {self.atr}")
+            print(f"...setting ATR period {self.atr}\n")
         except KeyError:
             print("Error: incorrect entry in monitor_conditions. Exiting.")
             exit()
@@ -112,12 +112,8 @@ class SilentWealthInputs:
         if self.debug:
             print("Loading debug YAML options.")
             self.output_data = self.debug["output_data"]
+            print(f"...output_data file location {self.output_data}")
             self.test_mode = self.debug.get("test_mode", False)
-            if self.test_mode:
-                try:
-                    print("...in debug mode.")
-                    self.test_data = self.debug["test_data"]
-                    print(f"...loading test data: {self.test_data}")
-                except KeyError:
-                    print("Error: in test_mode but cannot find test_data YAML entry. Exiting.")
-                    exit()
+            print(f"...test_mode {self.test_mode}")
+            self.test_data = self.debug.get("test_data", None)
+            print(f"...loading test data: {self.test_data}\n")

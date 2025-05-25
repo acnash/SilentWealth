@@ -237,6 +237,8 @@ class Controller(ABC):
 
         if test_mode:
             # This is for test only.....
+            test_hold_security = False
+
             ema = ExpMovingAverage(None, None, None, None, None)
             df_test = pd.read_csv(test_data)
             df_ema_short = ema.calculate_exp_moving_average(ema_short, df_test)
@@ -256,6 +258,7 @@ class Controller(ABC):
             atr_value = df_ema_short["volatile_enough"].iloc[-1]
 
             df_ema_medium = ema.calculate_exp_moving_average(ema_medium, df_ema_short)
+            df_ema_short[f"{ema_medium}_day_EMA"] = df_ema_medium[f"{ema_medium}_day_EMA"]
             if rsi > 0:
                 rsi_obj = RSI(df_ema_short)
                 rsi_value = rsi_obj.calculate_rsi(rsi)
@@ -278,28 +281,33 @@ class Controller(ABC):
                 if ema_short_value <= ema_medium_value:
                     print(
                         f"......{ema_short_value} <= {ema_medium_value} -- ema_short_value <= ema_medium_value --> SELL")
-                    return Controller.SELL
+                    action = Controller.SELL
 
                 if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
                     if rsi_value > 0:
                         if rsi_bottom < rsi_value <= rsi_top:
-                            print(
-                                f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> BUY")
-                            return Controller.BUY
+                            print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> BUY")
+                            action = Controller.BUY
                         else:
-                            print(
-                                f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> HOLD")
-                            return Controller.HOLD
+                            print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> HOLD")
+                            action = Controller.HOLD
                     else:
-                        print(
-                            f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> BUY")
-                        return Controller.BUY
+                        print(f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> BUY")
+                        action = Controller.BUY
                 else:
-                    print(
-                        f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> HOLD")
-                    return Controller.HOLD
+                    print(f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> HOLD")
+                    action = Controller.HOLD
 
-
+                if action == Controller.HOLD:
+                    pass
+                elif action == Controller.BUY:
+                    if test_hold_security == False:
+                        test_hold_security = True
+                        #self._place_market_crypto_order()
+                else:
+                    if test_hold_security == True:
+                        test_hold_security = False
+                        #self._sell_market_crypto_order()
 
         else:
             ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
