@@ -283,6 +283,10 @@ class Controller(ABC):
                         f"......{ema_short_value} <= {ema_medium_value} -- ema_short_value <= ema_medium_value --> SELL")
                     action = Controller.SELL
 
+                if close < ema_medium:
+                    print(f"......{close} < {ema_medium_value} -- close < ema_medium_value --> SELL")
+                    action =  Controller.SELL
+
                 if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
                     if rsi_value > 0:
                         if rsi_bottom < rsi_value <= rsi_top:
@@ -349,18 +353,18 @@ class Controller(ABC):
             #        print(f"......{close} > {vwap_value} -- close > vwap_value --> HOLD")
             #        return Controller.HOLD
 
-            typical_price = (df_ema_short["high"] + df_ema_short["low"] + df_ema_short["close"]) / 3
-            vwap_numerator = (typical_price * df_ema_short["volume"]).cumsum()
-            vwap_denominator = df_ema_short["volume"].cumsum()
-            df_ema_short["VWAP"] = vwap_numerator / vwap_denominator
-            if vwap:
-                vwap_value = df_ema_short["VWAP"].iloc[-1]
-            else:
-                vwap_value = 0
+            #typical_price = (df_ema_short["high"] + df_ema_short["low"] + df_ema_short["close"]) / 3
+            #vwap_numerator = (typical_price * df_ema_short["volume"]).cumsum()
+            #vwap_denominator = df_ema_short["volume"].cumsum()
+            #df_ema_short["VWAP"] = vwap_numerator / vwap_denominator
+            #if vwap:
+            #    vwap_value = df_ema_short["VWAP"].iloc[-1]
+            #else:
+            #    vwap_value = 0
 
-            if (close > vwap_value) and vwap:
-                print(f"......{close} > {vwap_value} -- close > vwap_value --> HOLD")
-                return Controller.HOLD
+            #if (close > vwap_value) and vwap:
+            #    print(f"......{close} > {vwap_value} -- close > vwap_value --> HOLD")
+            #    return Controller.HOLD
 
             if rsi > 0:
                 rsi_obj = RSI(df_ema_short)
@@ -370,6 +374,10 @@ class Controller(ABC):
 
             if ema_short_value <= ema_medium_value:
                 print(f"......{ema_short_value} <= {ema_medium_value} -- ema_short_value <= ema_medium_value --> SELL")
+                return Controller.SELL
+
+            if close < ema_medium:
+                print(f"......{close} < {ema_medium_value} -- close < ema_medium_value --> SELL")
                 return Controller.SELL
 
             if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:

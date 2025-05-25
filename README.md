@@ -2,11 +2,8 @@
 - --
 
 ## To-do list
-1. Move all input arguments into a YAML file format. 
-2. Write Python code to pull down historical data. 
-3. Run canalysis over historical data with a measure of loss/gain.
-4. Write a volume indicator/trigger.
-5. Write a stochastic oscillator. 
+1. See notepad.
+2. Immediate sell if price drops below medium exponential moving average
 - --
 
 ## Arguments
