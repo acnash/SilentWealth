@@ -38,53 +38,52 @@ class Controller(ABC):
             self.holding_stock = False
 
     def _sell_market_crypto_order(self, ib, contract, ticker_name):
-        if not self.holding_stock:
-            return
-        else:
-            positions = ib.positions()
-            # Find the BTC position
-            btc_position = next((pos for pos in positions if pos.contract.symbol == ticker_name), None)
+        if self.holding_stock:
+            try:
+                positions = ib.positions()
+                # Find the BTC position
+                btc_position = next((pos for pos in positions if pos.contract.symbol == ticker_name), None)
 
-            if btc_position:
-                btc_quantity = btc_position.position  # Quantity of BTC you hold
-                btc_quantity = Decimal(abs(btc_quantity)).quantize(Decimal("0.00000001"))
-                print(f"You have {btc_quantity} crypto.")
-            else:
-                print("No crypto position found.")
-                return
+                if btc_position:
+                    btc_quantity = btc_position.position  # Quantity of BTC you hold
+                    btc_quantity = Decimal(abs(btc_quantity)).quantize(Decimal("0.00000001"))
+                    print(f"You have {btc_quantity} crypto.")
+                else:
+                    print("No crypto position found.")
+                    return
 
-            # Create a market order to sell all BTC
-            if btc_position and btc_quantity > 0:
-                sell_order = MarketOrder(action=Controller.SELL, totalQuantity=float(btc_quantity))
-                sell_order.tif = "IOC"
+                # Create a market order to sell all BTC
+                if btc_position and btc_quantity > 0:
+                    sell_order = MarketOrder(action=Controller.SELL, totalQuantity=float(btc_quantity))
+                    sell_order.tif = "IOC"
 
-                # Place the order
-                trade = ib.placeOrder(contract, sell_order)
-                print(f"Sell order placed: {trade}")
-                self.holding_stock = False
-            else:
-                print("No crypto to sell or invalid position.")
+                    # Place the order
+                    trade = ib.placeOrder(contract, sell_order)
+                    print(f"Sell order placed: {trade}")
+                    self.holding_stock = False
+                else:
+                    print("No crypto to sell or invalid position.")
+            except:
+                print(f"***ERROR***: failed to sell crypto.")
 
     def _place_market_crypto_order(self, ib, contract, dollar_amount, ticker_name):
         if not self.holding_stock:
-            share_ticker = ib.reqMktData(contract, '', False, False)
-            ib.sleep(2)
-            btc_price = share_ticker.last if share_ticker.last > 0 else share_ticker.bid
-            btc_quantity = dollar_amount / btc_price
-            btc_quantity = round(btc_quantity, 8)
+            try:
+                #share_ticker = ib.reqMktData(contract, '', False, False)
+                #ib.sleep(2)
+                #btc_price = share_ticker.last if share_ticker.last > 0 else share_ticker.bid
+                #btc_quantity = dollar_amount / btc_price
+                #btc_quantity = round(btc_quantity, 8)
 
-            order = MarketOrder(Controller.BUY, 0)
-            order.cashQty = dollar_amount
-            order.tif = "IOC"
-            #order = LimitOrder(
-            #    action='BUY',  # 'BUY' to purchase BTC
-            #    totalQuantity=btc_quantity,  # Specify the calculated BTC quantity
-            #    lmtPrice=btc_price  # Set limit price to 0 (market-like)
-            #)
-            #order.tif = "IOC"
+                order = MarketOrder(Controller.BUY, 0)
+                order.cashQty = dollar_amount
+                order.tif = "IOC"
 
-            trade = ib.placeOrder(contract, order)
-            self.holding_stock = True
+                trade = ib.placeOrder(contract, order)
+                print(f"Buy order placed: {trade}")
+                self.holding_stock = True
+            except:
+                print(f"***ERROR***: failed to buy crypto at dollar_amount: {dollar_amount}")
 
 
     def _place_market_order(self, ib,
@@ -239,37 +238,47 @@ class Controller(ABC):
             # This is for test only.....
             test_hold_security = False
 
-            ema = ExpMovingAverage(None, None, None, None, None)
-            df_test = pd.read_csv(test_data)
-            df_ema_short = ema.calculate_exp_moving_average(ema_short, df_test)
+            #build test logic in here (must be identical to the live logic)
+            ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
+            df = ema.calculate_exp_moving_average(ema_short)
+
             # calculate the Average True Range
-            df_ema_short['previous_close'] = df_ema_short['close'].shift(1)
-            df_ema_short['high_low'] = df_ema_short['high'] - df_ema_short['low']
-            df_ema_short['high_pc'] = (df_ema_short['high'] - df_ema_short['previous_close']).abs()
-            df_ema_short['low_pc'] = (df_ema_short['low'] - df_ema_short['previous_close']).abs()
-            df_ema_short['tr'] = df_ema_short[['high_low', 'high_pc', 'low_pc']].max(axis=1)
             if atr_period > 0:
-                df_ema_short['atr'] = df_ema_short['tr'].rolling(window=atr_period).mean()
-                vol_threshold = df_ema_short['atr'].mean()  # or a quantile
-                df_ema_short['volatile_enough'] = df_ema_short['atr'] > vol_threshold
+                high = df["high"]
+                low = df["low"]
+                close = df["close"]
+                prev_close = close.shift(1)
+
+                tr1 = high - low
+                tr2 = (high - close).abs()
+                tr3 = (low - prev_close).abs()
+
+                tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                atr = tr.ewm(span=atr_period, adjust=False).mean()
+                df[f"ATR_{atr_period}"] = atr
+                if df[f"ATR_{atr_period}"].iloc[-1] > df[f"ATR_{atr_period}"].iloc[-2]:
+                    atr_value = True
+                else:
+                    atr_value = False
             else:
                 # always set True so this executes
-                df_ema_short['volatile_enough'] = True
-            atr_value = df_ema_short["volatile_enough"].iloc[-1]
+                atr_value = True
 
-            df_ema_medium = ema.calculate_exp_moving_average(ema_medium, df_ema_short)
-            df_ema_short[f"{ema_medium}_day_EMA"] = df_ema_medium[f"{ema_medium}_day_EMA"]
+            df_ema_medium = ema.calculate_exp_moving_average(ema_medium)
+            df[f"{ema_medium}_day_EMA"] = df_ema_medium[f"{ema_medium}_day_EMA"]
+            df_ema_long = ema.calculate_exp_moving_average(ema_long)
+            df[f"{ema_long}_day_EMA"] = df_ema_long[f"{ema_long}_day_EMA"]
+
             if rsi > 0:
-                rsi_obj = RSI(df_ema_short)
+                rsi_obj = RSI(df)
                 rsi_value = rsi_obj.calculate_rsi(rsi)
             else:
                 rsi_value = 0
 
-                #loop over the data frame for close information and logic
-                #action logic to buy etc is in here and not returned to the calling function
-            for _, row in df_ema_short.iterrows():
+            #loop over the data frame for close information and logic
+            #action logic to buy etc is in here and not returned to the calling function
+            for _, row in df.iterrows():
                 close = row["close"]
-                print(close)
                 ema_short_value = row[f"{ema_short}_day_EMA"]
                 ema_medium_value = row[f"{ema_medium}_day_EMA"]
                 ema_long_value = row[f"{ema_long}_day_EMA"]
@@ -315,59 +324,38 @@ class Controller(ABC):
 
         else:
             ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
-            df_ema_short = ema.calculate_exp_moving_average(ema_short)
+            df = ema.calculate_exp_moving_average([ema_short, ema_medium, ema_long])
+            df = df.dropna()
 
-            ema_short_value = df_ema_short[f"{ema_short}_day_EMA"].iloc[-1]
+            close = df["close"].iloc[-1]
+            ema_short_value = df[f"{ema_short}_day_EMA"].iloc[-1]
+            ema_medium_value = df[f"{ema_medium}_day_EMA"].iloc[-1]
+            ema_long_value = df[f"{ema_long}_day_EMA"].iloc[-1]
 
             # calculate the Average True Range
-            df_ema_short['previous_close'] = df_ema_short['close'].shift(1)
-            df_ema_short['high_low'] = df_ema_short['high'] - df_ema_short['low']
-            df_ema_short['high_pc'] = (df_ema_short['high'] - df_ema_short['previous_close']).abs()
-            df_ema_short['low_pc'] = (df_ema_short['low'] - df_ema_short['previous_close']).abs()
-            df_ema_short['tr'] = df_ema_short[['high_low', 'high_pc', 'low_pc']].max(axis=1)
-
             if atr_period > 0:
-                df_ema_short['atr'] = df_ema_short['tr'].rolling(window=atr_period).mean()
-                vol_threshold = df_ema_short['atr'].mean()  # or a quantile
-                df_ema_short['volatile_enough'] = df_ema_short['atr'] > vol_threshold
+                high = df["high"]
+                low = df["low"]
+                close = df["close"]
+                prev_close = close.shift(1)
+
+                tr1 = high - low
+                tr2 = (high - close).abs()
+                tr3 = (low - prev_close).abs()
+
+                tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+                atr = tr.ewm(span=atr_period, adjust=False).mean()
+                df[f"ATR_{atr_period}"] = atr
+                if df[f"ATR_{atr_period}"].iloc[-1] > df[f"ATR_{atr_period}"].iloc[-2]:
+                    atr_value = True
+                else:
+                    atr_value = False
             else:
                 # always set True so this executes
-                df_ema_short['volatile_enough'] = True
-            atr_value = df_ema_short["volatile_enough"].iloc[-1]
-
-            df_ema_medium = ema.calculate_exp_moving_average(ema_medium)
-            ema_medium_value = df_ema_medium[f"{ema_medium}_day_EMA"].iloc[-1]
-
-            if ema_long > 0:
-                df_ema_long = ema.calculate_exp_moving_average(ema_long)
-                ema_long_value = df_ema_long[f"{ema_long}_day_EMA"].iloc[-1]
-            else:
-                ema_long_value = 0
-
-            close = df_ema_short["close"].iloc[-1]
-            #if vwap > 0:
-            #    vwap_obj = VolumeWeightedAverage(df_ema_short)
-            #    df_vwap = vwap_obj.calculate_wva(vwap)
-            #    vwap_value = df_vwap[f"rolling_vwap"].iloc[-1]
-            #    if close > vwap_value:
-            #        print(f"......{close} > {vwap_value} -- close > vwap_value --> HOLD")
-            #        return Controller.HOLD
-
-            #typical_price = (df_ema_short["high"] + df_ema_short["low"] + df_ema_short["close"]) / 3
-            #vwap_numerator = (typical_price * df_ema_short["volume"]).cumsum()
-            #vwap_denominator = df_ema_short["volume"].cumsum()
-            #df_ema_short["VWAP"] = vwap_numerator / vwap_denominator
-            #if vwap:
-            #    vwap_value = df_ema_short["VWAP"].iloc[-1]
-            #else:
-            #    vwap_value = 0
-
-            #if (close > vwap_value) and vwap:
-            #    print(f"......{close} > {vwap_value} -- close > vwap_value --> HOLD")
-            #    return Controller.HOLD
+                atr_value = True
 
             if rsi > 0:
-                rsi_obj = RSI(df_ema_short)
+                rsi_obj = RSI(df)
                 rsi_value = rsi_obj.calculate_rsi(rsi)
             else:
                 rsi_value = 0
@@ -383,13 +371,13 @@ class Controller(ABC):
             if ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
                 if rsi_value > 0:
                     if rsi_bottom < rsi_value <= rsi_top:
-                        print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> BUY")
+                        print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top & atr_value == True --> BUY")
                         return Controller.BUY
                     else:
-                        print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> HOLD")
+                        print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top & atr_value == True --> HOLD")
                         return Controller.HOLD
                 else:
-                    print(f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> BUY")
+                    print(f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value  --> BUY")
                     return Controller.BUY
             else:
                 print(
