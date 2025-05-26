@@ -25,6 +25,8 @@ class RSI:
 
         # Compute the RSI
         rsi = 100 - (100 / (1 + rs))
-        last_rsi = rsi.iloc[-1]
+        self.df["rsi"] = rsi
+        #last_rsi = rsi.iloc[-1]
 
-        return last_rsi
+        #return last_rsi
+        return self.df
