@@ -14,14 +14,17 @@ buy_sell_conditions:
   limit_order: False
 monitor_conditions:
   ema_short: 12
-  ema_medium: 30
-  ema_long: 100
+  ema_medium: 24
+  ema_long: 50
   vwap: False
-  rsi: 14
-  rsi_top: 70
+  rsi: 9
+  rsi_top: 60
   rsi_bottom: 1
-  atr: 14
+  atr: 3
 debug:
-  test_mode: False
+  test_mode: True
   test_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1_23hrs.dat
   output_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\something.dat
+  bootstrap_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1.dat
+  bootstrap_sample_size: 1440
+  bootstrap_number_samples: 200

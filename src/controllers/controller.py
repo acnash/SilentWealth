@@ -1,17 +1,20 @@
+import os.path
+import csv
 from abc import ABC, abstractmethod
 from datetime import datetime
 import random
 from decimal import Decimal, getcontext
 
+import numpy as np
 import pandas as pd
 from ib_insync import IB, MarketOrder, LimitOrder, StopLimitOrder
+from matplotlib import pyplot as plt
 
 from src.monitor_tools.RSI import RSI
 from src.monitor_tools.exp_moving_average import ExpMovingAverage
 
 
 class Controller(ABC):
-
     HOLD = "hold"
     BUY = "buy"
     SELL = "sell"
@@ -85,7 +88,6 @@ class Controller(ABC):
             except:
                 print(f"***ERROR***: failed to buy crypto at dollar_amount: {dollar_amount}")
 
-
     def _place_market_order(self, ib,
                             contract,
                             quantity,
@@ -129,7 +131,8 @@ class Controller(ABC):
                         atr_period,
                         output_data,
                         test_mode,
-                        test_data):
+                        test_data,
+                        bootstrap):
 
         if not self.commission_pot:
             self.commission_pot = commission_pot
@@ -140,21 +143,98 @@ class Controller(ABC):
         stop = datetime.strptime(stop_time, "%H:%M").time() if stop_time else None
 
         if test_mode:
-            self._silent_wealth_start(None,
-                                      None,
-                                      frame_size,
-                                      ticker_name,
-                                      ema_short,
-                                      ema_medium,
-                                      ema_long,
-                                      vwap,
-                                      rsi,
-                                      rsi_top,
-                                      rsi_bottom,
-                                      atr_period,
-                                      output_data,
-                                      test_mode,
-                                      test_data)
+            if bootstrap:
+                bootstrap_total_profit = []
+                bootstrap_total_commission = []
+                bootstrap_net_profit = []
+                bootstrap_samples = bootstrap.build_samples()
+
+                for sample_df in bootstrap_samples:
+
+                    total_profit, total_commission = self._silent_wealth_start(None,
+                                                                               None,
+                                                                               frame_size,
+                                                                               ticker_name,
+                                                                               ema_short,
+                                                                               ema_medium,
+                                                                               ema_long,
+                                                                               vwap,
+                                                                               rsi,
+                                                                               rsi_top,
+                                                                               rsi_bottom,
+                                                                               atr_period,
+                                                                               output_data,
+                                                                               test_mode,
+                                                                               sample_df)
+                    print(f"===============RESULT===============")
+                    print(f"Gross profit: ${total_profit}")
+                    print(f"Total commission: ${total_commission}")
+                    print(f"Net profit: ${total_profit - total_commission}")
+                    bootstrap_total_profit.append(total_profit)
+                    bootstrap_total_commission.append(total_commission)
+                    bootstrap_net_profit.append(total_profit - total_commission)
+
+                # output the averages
+                mean_gross_profit = np.mean(bootstrap_total_profit)
+                mean_commission = np.mean(bootstrap_total_commission)
+                mean_total_profit = np.mean(bootstrap_net_profit)
+
+                if not os.path.exists("../temp/bs_results.txt"):
+                    with open("../temp/bs_results.txt", "w", newline="") as file:
+                        writer = csv.writer(file)
+                        writer.writerow(["ema_short", "ema_medium", "ema_long", "rsi", "rsi_top", "rsi_bottom", "atr", "mean_gross_profit", "mean_commission", "mean_total_profit"])
+                        writer.writerow([ema_short, ema_medium, ema_long, rsi, rsi_top, rsi_bottom, atr_period, mean_gross_profit, mean_commission, mean_total_profit])
+                else:
+                    with open("../temp/bs_results.txt", "a", newline="") as file:
+                        writer = csv.writer(file)
+                        writer.writerow([ema_short, ema_medium, ema_long, rsi, rsi_top, rsi_bottom, atr_period, mean_gross_profit, mean_commission, mean_total_profit])
+
+
+                #lists = [bootstrap_total_profit, bootstrap_total_commission, bootstrap_net_profit]
+                #plot_names = ["Gross Profit", "Total Commission", "Net Profit"]
+                ## Create a 1x3 subplot
+                #fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+
+                #for i, data in enumerate(lists):
+                #    mean_val = np.mean(data)
+
+                #    # Plot histogram
+                #    axes[i].hist(data, bins=30, color='skyblue', edgecolor='black')
+                #    axes[i].axvline(mean_val, color='red', linestyle='dashed', linewidth=2)
+
+                #   # Add annotation
+                #    axes[i].text(mean_val, max(axes[i].get_ylim()) * 0.9,
+                #                 f'Mean: ${mean_val:.2f}', color='red', ha='center')
+
+                #    # Titles and labels
+                #    axes[i].set_title(f'{plot_names[i]}')
+                #    axes[i].set_xlabel('Value $')
+                #    if i == 0:
+                #        axes[i].set_ylabel('Frequency')
+
+                #plt.tight_layout()
+                #plt.show()
+
+            else:
+                total_profit, total_commission = self._silent_wealth_start(None,
+                                                                           None,
+                                                                           frame_size,
+                                                                           ticker_name,
+                                                                           ema_short,
+                                                                           ema_medium,
+                                                                           ema_long,
+                                                                           vwap,
+                                                                           rsi,
+                                                                           rsi_top,
+                                                                           rsi_bottom,
+                                                                           atr_period,
+                                                                           output_data,
+                                                                           test_mode,
+                                                                           test_data)
+                print(f"===============RESULT===============")
+                print(f"Gross profit: ${total_profit}")
+                print(f"Total commission: ${total_commission}")
+                print(f"Net profit: ${total_profit - total_commission}")
         else:
             if (start and stop and start <= current_time <= stop) or (not start and not stop):
                 action = self._silent_wealth_start(ib,
@@ -174,7 +254,7 @@ class Controller(ABC):
                                                    test_data)
 
                 if action == Controller.HOLD:
-                    print(f"...holding {ticker_name}.")
+                    #print(f"...holding {ticker_name}.")
                     pass
                 elif action == Controller.SELL:
                     if self.holding_stock:
@@ -191,7 +271,8 @@ class Controller(ABC):
                         self.holding_stock = False
                 elif action == Controller.BUY:
                     if self.holding_stock:
-                        print("...holding. Holding stock/crypto.")
+                        #print("...holding. Holding stock/crypto.")
+                        pass
                     else:
                         print(f"...buying {ticker_name}.")
                         if ticker_name == "BTC" or ticker_name == "SOL" or ticker_name == "ETH":
@@ -237,11 +318,12 @@ class Controller(ABC):
         if test_mode:
             # This is for test only.....
             test_hold_security = False
-            test_df = pd.read_csv(test_data)
-            #build test logic in here (must be identical to the live logic)
+            if isinstance(test_data, pd.DataFrame):
+                test_df = test_data
+            else:
+                test_df = pd.read_csv(test_data)
             ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
             df = ema.calculate_exp_moving_average([ema_short, ema_medium, ema_long], test_df)
-            #df = df.dropna()
 
             # calculate the Average True Range
             if atr_period > 0:
@@ -266,7 +348,10 @@ class Controller(ABC):
 
             #loop over the data frame for close information and logic
             #action logic to buy etc is in here and not returned to the calling function
-            earlier_atr = 0 # always fudge the first ATR value
+            total_commission = 0
+            bought_btc = 0
+            total_profit = 0
+            earlier_atr = 0  # always fudge the first ATR value
             for _, row in df.iterrows():
                 close = row["close"]
                 ema_short_value = row[f"{ema_short}_day_EMA"]
@@ -286,45 +371,64 @@ class Controller(ABC):
                 else:
                     atr_value = False
 
-                #    if commission >= com_pot:
-                #        print("Ran out of commission.")
-                #        break
-
                 if ema_short_value <= ema_medium_value:
-                    print(f"......{ema_short_value} <= {ema_medium_value} -- ema_short_value <= ema_medium_value --> SELL")
+                    #print(
+                    #    f"......{ema_short_value} <= {ema_medium_value} -- ema_short_value <= ema_medium_value --> SELL")
                     action = Controller.SELL
                 elif close < ema_medium:
-                    print(f"......{close} < {ema_medium_value} -- close < ema_medium_value --> SELL")
+                    #print(f"......{close} < {ema_medium_value} -- close < ema_medium_value --> SELL")
                     action = Controller.SELL
                 elif ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
                     if rsi_value > 0:
                         if rsi_bottom < rsi_value <= rsi_top:
-                            print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> BUY")
+                            #print(
+                            #    f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> BUY")
                             action = Controller.BUY
                         else:
-                            print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> HOLD")
+                            #print(
+                            #    f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> HOLD")
                             action = Controller.HOLD
-                    else:
-                        print(f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> BUY")
+                    else:  # when no RSI involved
+                        #print(
+                        #    f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> BUY")
                         action = Controller.BUY
                 else:
-                    print(f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> HOLD")
+                    #print(
+                    #    f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> HOLD")
                     action = Controller.HOLD
 
-
                 if action == Controller.HOLD:
+                    #print("Holding")
                     pass
                 elif action == Controller.BUY:
-                    if test_hold_security == False:
-                        print("Buying")
+                    if not test_hold_security:
+                        #print("Buying")
+                        bought_btc = 3000 / close
                         test_hold_security = True
-                        #self._place_market_crypto_order()
+                    else:
+                        pass
+                        #print("Holding (Buy)")
                 elif action == Controller.SELL:
-                    if test_hold_security == True:
-                        print("Selling")
+                    if test_hold_security:
+                        #print("Selling")
+                        total_commission = total_commission + 3.4
+                        sell_price = bought_btc * close
+                        total_profit = total_profit + (sell_price - 3000)
                         test_hold_security = False
-                        #self._sell_market_crypto_order()
+                    else:
+                        pass
+                        #print("Holding (Sell)")
 
+            # at the end of the test day sell if still holding
+            if test_hold_security:
+                #print("Selling")
+                total_commission = total_commission + 3.4
+                sell_price = bought_btc * row["close"]
+                total_profit = total_profit + (sell_price - 3000)
+
+            return total_profit, total_commission
+
+        # when trading with a live (paper or otherwise) account i.e., none-test
         else:
             ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
             df = ema.calculate_exp_moving_average([ema_short, ema_medium, ema_long])
@@ -372,18 +476,21 @@ class Controller(ABC):
             elif ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
                 if rsi_value > 0:
                     if rsi_bottom < rsi_value <= rsi_top:
-                        print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top & atr_value == True --> BUY")
+                        print(
+                            f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top & atr_value == True --> BUY")
                         return Controller.BUY
                     else:
-                        print(f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top & atr_value == True --> HOLD")
+                        print(
+                            f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top & atr_value == True --> HOLD")
                         return Controller.HOLD
-                else:
-                    print(f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value  --> BUY")
+                else:  # when no RSI involved
+                    print(
+                        f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value  --> BUY")
                     return Controller.BUY
             else:
-                print(f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> HOLD")
+                print(
+                    f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> HOLD")
                 return Controller.HOLD
-
 
     @abstractmethod
     def validate(self):

@@ -117,3 +117,27 @@ class SilentWealthInputs:
             print(f"...test_mode {self.test_mode}")
             self.test_data = self.debug.get("test_data", None)
             print(f"...loading test data: {self.test_data}\n")
+            self.bootstrap_data = self.debug.get("bootstrap_data", None)
+            print(f"...loading bootstrap data: {self.bootstrap_data}")
+            if self.bootstrap_data:
+                try:
+                    self.bootstrap_sample_size = self.debug["bootstrap_sample_size"]
+                    print(f"...size of bootstrap sample: {self.bootstrap_sample_size}")
+                    self.bootstrap_number_samples = self.debug["bootstrap_number_samples"]
+                    print(f"...bootstrap number of samples: {self.bootstrap_number_samples}")
+                except KeyError:
+                    print("Error: incorrect entries for bootstrap variables. Exiting")
+                    exit()
+
+    def prep_bootstrap(self):
+        self.ema_short = [9, 12, 15]
+        self.ema_medium = [18, 21, 24]
+        self.ema_long = [50, 75, 100]
+
+        self.rsi = [9, 12, 15]
+        self.rsi_top = [55, 60, 65]
+        self.rsi_bottom = [1]
+
+        self.atr = [9, 12, 15]
+
+

@@ -7,6 +7,7 @@ import traceback
 from ib_insync import Contract
 
 from src.controllers.controller import Controller
+from src.testing.bootstrap import Bootstrap
 
 
 class BTCController(Controller):
@@ -38,6 +39,12 @@ class BTCController(Controller):
         self.output_data = self.silent_wealth_inputs.output_data
         self.test_mode = self.silent_wealth_inputs.test_mode
         self.test_data = self.silent_wealth_inputs.test_data
+
+        self.bootstrap_data = self.silent_wealth_inputs.bootstrap_data
+        if self.bootstrap_data:
+            self.bootstrap_sample_size = self.silent_wealth_inputs.bootstrap_sample_size
+            self.bootstrap_number_samples = self.silent_wealth_inputs.bootstrap_number_samples
+
 
 
     def validate(self):
@@ -80,31 +87,76 @@ class BTCController(Controller):
                                                    self.atr,
                                                    self.output_data,
                                                    self.test_mode,
-                                                   self.test_data)
+                                                   self.test_data,
+                                                   None)
 
         if self.test_mode:
             # for testing only
-            self._scheduled_task(
-                None,
-                None,
-                self.ticker_name,
-                None,
-                self.frame_size,
-                self.dollar_amount,
-                self.commission_pot_child,
-                BTCController.BTC_PAXOS_START_TIME,
-                BTCController.BTC_PAXOS_END_TIME,
-                self.ema_short,
-                self.ema_medium,
-                self.ema_long,
-                self.vwap,
-                self.rsi,
-                self.rsi_top,
-                self.rsi_bottom,
-                self.atr,
-                self.output_data,
-                self.test_mode,
-                self.test_data)
+            #set bootstrap data if it's available
+            if self.bootstrap_data:
+                bootstrap = Bootstrap(self.bootstrap_data, self.bootstrap_sample_size, self.bootstrap_number_samples)
+                self.silent_wealth_inputs.prep_bootstrap()
+                for ema_short in self.silent_wealth_inputs.ema_short:
+                    for ema_medium in self.silent_wealth_inputs.ema_medium:
+                        for ema_long in self.silent_wealth_inputs.ema_long:
+                            for rsi in self.silent_wealth_inputs.rsi:
+                                for rsi_top in self.silent_wealth_inputs.rsi_top:
+                                    for rsi_bottom in self.silent_wealth_inputs.rsi_bottom:
+                                        for atr in self.silent_wealth_inputs.atr:
+                                            print("************************************************************")
+                                            print(f"ema_short: {ema_short}")
+                                            print(f"ema_medium: {ema_medium}")
+                                            print(f"ema_long: {ema_long}")
+                                            print(f"rsi: {rsi}")
+                                            print(f"rsi_top: {rsi_top}")
+                                            print(f"rsi_bottom: {rsi_bottom}")
+                                            print(f"atr: {atr}")
+                                            self._scheduled_task(
+                                                None,
+                                                None,
+                                                self.ticker_name,
+                                                None,
+                                                self.frame_size,
+                                                self.dollar_amount,
+                                                self.commission_pot_child,
+                                                BTCController.BTC_PAXOS_START_TIME,
+                                                BTCController.BTC_PAXOS_END_TIME,
+                                                ema_short,
+                                                ema_medium,
+                                                ema_long,
+                                                self.vwap,
+                                                rsi,
+                                                rsi_top,
+                                                rsi_bottom,
+                                                atr,
+                                                self.output_data,
+                                                self.test_mode,
+                                                self.test_data,
+                                                bootstrap)
+
+            else:
+                self._scheduled_task(
+                    None,
+                    None,
+                    self.ticker_name,
+                    None,
+                    self.frame_size,
+                    self.dollar_amount,
+                    self.commission_pot_child,
+                    BTCController.BTC_PAXOS_START_TIME,
+                    BTCController.BTC_PAXOS_END_TIME,
+                    self.ema_short,
+                    self.ema_medium,
+                    self.ema_long,
+                    self.vwap,
+                    self.rsi,
+                    self.rsi_top,
+                    self.rsi_bottom,
+                    self.atr,
+                    self.output_data,
+                    self.test_mode,
+                    self.test_data,
+                    None)
         else:
             try:
                 start_time = datetime.strptime(BTCController.BTC_PAXOS_START_TIME, "%H:%M").time()
