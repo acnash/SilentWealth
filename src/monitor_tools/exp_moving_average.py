@@ -3,7 +3,7 @@ from pathlib import Path
 
 class ExpMovingAverage:
 
-    def __init__(self, ib, stock, frame_size, stock_name, output_data):
+    def __init__(self, ib, stock, frame_size, unit_type, stock_name, output_data):
 
         # for testing just build the object of the class
         if not ib:
@@ -11,18 +11,19 @@ class ExpMovingAverage:
 
         self.output_data = output_data
         self.frame_size = frame_size
+        self.unit_type = unit_type
 
-        if frame_size == 1:
-            unit = "min"
-        elif frame_size > 1:
-            unit = "mins"
+        #if frame_size == 1:
+        #    unit = "min"
+        #elif frame_size > 1:
+        #    unit = "mins"
 
         if stock_name == "BTC" or stock_name == "ETH" or stock_name == "SOL":
             self.historical_data = ib.reqHistoricalData(
                 stock,
                 endDateTime='',
-                durationStr='1 D',
-                barSizeSetting=f'{str(frame_size)} {unit}',
+                durationStr='365 D',
+                barSizeSetting=f'{str(frame_size)} {unit_type}',
                 whatToShow='MIDPOINT',
                 useRTH=True
             )
@@ -31,8 +32,8 @@ class ExpMovingAverage:
             self.historical_data = ib.reqHistoricalData(
                 stock,
                 endDateTime='',
-                durationStr='1 D',
-                barSizeSetting=f'{str(frame_size)} {unit}',
+                durationStr='365 D',
+                barSizeSetting=f'{str(frame_size)} {unit_type}',
                 whatToShow='TRADES',  # Options: TRADES, MIDPOINT, etc.
                 useRTH=True
             )
@@ -71,7 +72,7 @@ class ExpMovingAverage:
                         filepath = filepath.with_suffix(".dat")
 
                     # Step 2: Modify the file name to include '_exp_20' before the extension
-                    new_filename = filepath.stem + f"_frame_size_{self.frame_size}" + filepath.suffix
+                    new_filename = filepath.stem + f"_frame_size_{self.frame_size}_{self.unit_type}" + filepath.suffix
                     new_filepath = filepath.with_name(new_filename)
                     df.to_csv(new_filepath, index=False)
 

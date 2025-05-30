@@ -4,6 +4,7 @@ stock:
   dollar_amount: 2000
   commission_pot: 200
   frame_size: 1
+  unit_type: hour
 account_data:
   account: paper
   platform: ibg
@@ -18,13 +19,13 @@ monitor_conditions:
   ema_long: 50
   vwap: False
   rsi: 9
-  rsi_top: 60
-  rsi_bottom: 1
+  rsi_top: 70
+  rsi_bottom: 55
   atr: 3
 debug:
   test_mode: True
-  test_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1_23hrs.dat
-  output_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\something.dat
-  bootstrap_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1.dat
-  bootstrap_sample_size: 1440
-  bootstrap_number_samples: 200
+  test_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1_23hrs.dat  # only needed if bootstrap is ont being used
+  output_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history.dat
+  bootstrap_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1_hour.dat
+  bootstrap_sample_size: 168  # e.g., 168 hours in a week
+  bootstrap_number_samples: 200  # select 200 1-week (168 hours) samples

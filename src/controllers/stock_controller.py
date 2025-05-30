@@ -23,6 +23,7 @@ class StockController(Controller):
         self.ticker_name = self.silent_wealth_inputs.ticker_name
         self.exchange = self.silent_wealth_inputs.exchange
         self.frame_size = self.silent_wealth_inputs.frame_size
+        self.unit_type = self.silent_wealth_inputs.unit_type
         self.quantity = self.silent_wealth_inputs.quantity
         self.purchase_type = self.silent_wealth_inputs.purchase_type
         self.stop_loss = self.silent_wealth_inputs.stop_loss

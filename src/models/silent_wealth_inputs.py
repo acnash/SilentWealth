@@ -52,6 +52,8 @@ class SilentWealthInputs:
             print(f"...on the {self.exchange} exchange.")
             self.frame_size = stock["frame_size"]
             print(f"...resolution size {self.frame_size}.")
+            self.unit_type = stock["unit_type"]
+            print(f"...unit type {self.unit_type}")
             self.commission_pot = stock.get("commission_pot", 200)
             print(f"...commission pot size ${self.commission_pot}")
             if self.ticker_name == "BTC" or self.ticker_name == "SOL" or self.ticker_name == "ETH":
@@ -135,8 +137,8 @@ class SilentWealthInputs:
         self.ema_long = [50, 75, 100]
 
         self.rsi = [9, 12, 15]
-        self.rsi_top = [55, 60, 65]
-        self.rsi_bottom = [1]
+        self.rsi_top = [70]
+        self.rsi_bottom = [50]
 
         self.atr = [9, 12, 15]
 

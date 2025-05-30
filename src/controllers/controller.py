@@ -117,6 +117,7 @@ class Controller(ABC):
                         ticker_name,
                         quantity,
                         frame_size,
+                        unit_type,
                         dollar_amount,
                         commission_pot,
                         start_time,
@@ -155,6 +156,7 @@ class Controller(ABC):
                                                                                None,
                                                                                frame_size,
                                                                                ticker_name,
+                                                                               unit_type,
                                                                                ema_short,
                                                                                ema_medium,
                                                                                ema_long,
@@ -219,6 +221,7 @@ class Controller(ABC):
                 total_profit, total_commission = self._silent_wealth_start(None,
                                                                            None,
                                                                            frame_size,
+                                                                           unit_type,
                                                                            ticker_name,
                                                                            ema_short,
                                                                            ema_medium,
@@ -237,21 +240,22 @@ class Controller(ABC):
                 print(f"Net profit: ${total_profit - total_commission}")
         else:
             if (start and stop and start <= current_time <= stop) or (not start and not stop):
-                action = self._silent_wealth_start(ib,
-                                                   contract,
-                                                   frame_size,
-                                                   ticker_name,
-                                                   ema_short,
-                                                   ema_medium,
-                                                   ema_long,
-                                                   vwap,
-                                                   rsi,
-                                                   rsi_top,
-                                                   rsi_bottom,
-                                                   atr_period,
-                                                   output_data,
-                                                   test_mode,
-                                                   test_data)
+                action = self._silent_wealth_start(ib=ib,
+                                                   contract=contract,
+                                                   frame_size=frame_size,
+                                                   unit_type=unit_type,
+                                                   ticker_name=ticker_name,
+                                                   ema_short=ema_short,
+                                                   ema_medium=ema_medium,
+                                                   ema_long=ema_long,
+                                                   vwap=vwap,
+                                                   rsi=rsi,
+                                                   rsi_top=rsi_top,
+                                                   rsi_bottom=rsi_bottom,
+                                                   atr_period=atr_period,
+                                                   output_data=output_data,
+                                                   test_mode=test_mode,
+                                                   test_data=None)
 
                 if action == Controller.HOLD:
                     #print(f"...holding {ticker_name}.")
@@ -302,6 +306,7 @@ class Controller(ABC):
     def _silent_wealth_start(self, ib,
                              contract,
                              frame_size,
+                             unit_type,
                              ticker_name,
                              ema_short,
                              ema_medium,
@@ -322,7 +327,7 @@ class Controller(ABC):
                 test_df = test_data
             else:
                 test_df = pd.read_csv(test_data)
-            ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
+            ema = ExpMovingAverage(ib, contract, frame_size, unit_type, ticker_name, output_data)
             df = ema.calculate_exp_moving_average([ema_short, ema_medium, ema_long], test_df)
 
             # calculate the Average True Range
@@ -430,7 +435,7 @@ class Controller(ABC):
 
         # when trading with a live (paper or otherwise) account i.e., none-test
         else:
-            ema = ExpMovingAverage(ib, contract, frame_size, ticker_name, output_data)
+            ema = ExpMovingAverage(ib, contract, frame_size, unit_type, ticker_name, output_data)
             df = ema.calculate_exp_moving_average([ema_short, ema_medium, ema_long])
 
             close = df["close"].iloc[-1]

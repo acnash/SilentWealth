@@ -23,6 +23,7 @@ class BTCController(Controller):
         self.ticker_name = self.silent_wealth_inputs.ticker_name
         self.exchange = self.silent_wealth_inputs.exchange
         self.frame_size = self.silent_wealth_inputs.frame_size
+        self.unit_type = self.silent_wealth_inputs.unit_type
         self.dollar_amount = self.silent_wealth_inputs.dollar_amount
         self.commission_pot_child = self.silent_wealth_inputs.commission_pot
         self.purchase_type = self.silent_wealth_inputs.purchase_type
@@ -73,6 +74,7 @@ class BTCController(Controller):
                                                    self.ticker_name,
                                                    None,
                                                    self.frame_size,
+                                                   self.unit_type,
                                                    self.dollar_amount,
                                                    self.commission_pot_child,
                                                    BTCController.BTC_PAXOS_START_TIME,
@@ -117,6 +119,7 @@ class BTCController(Controller):
                                                 self.ticker_name,
                                                 None,
                                                 self.frame_size,
+                                                self.unit_type,
                                                 self.dollar_amount,
                                                 self.commission_pot_child,
                                                 BTCController.BTC_PAXOS_START_TIME,
@@ -141,6 +144,7 @@ class BTCController(Controller):
                     self.ticker_name,
                     None,
                     self.frame_size,
+                    self.unit_type,
                     self.dollar_amount,
                     self.commission_pot_child,
                     BTCController.BTC_PAXOS_START_TIME,
