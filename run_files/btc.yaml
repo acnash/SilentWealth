@@ -28,4 +28,4 @@ debug:
   output_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history.dat
   bootstrap_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1_hour.dat
   bootstrap_sample_size: 168  # e.g., 168 hours in a week
-  bootstrap_number_samples: 200  # select 200 1-week (168 hours) samples
+  bootstrap_number_samples: 1000  # select 200 1-week (168 hours) samples

@@ -13,11 +13,6 @@ class ExpMovingAverage:
         self.frame_size = frame_size
         self.unit_type = unit_type
 
-        #if frame_size == 1:
-        #    unit = "min"
-        #elif frame_size > 1:
-        #    unit = "mins"
-
         if stock_name == "BTC" or stock_name == "ETH" or stock_name == "SOL":
             self.historical_data = ib.reqHistoricalData(
                 stock,
