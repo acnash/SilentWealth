@@ -17,7 +17,7 @@ monitor_conditions:
   ema_short: 12
   ema_medium: 24
   ema_long: 50
-  vwap: False
+  vwap: 14
   rsi: 9
   rsi_top: 70
   rsi_bottom: 55
@@ -25,7 +25,7 @@ monitor_conditions:
 debug:
   test_mode: True
   test_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1_23hrs.dat  # only needed if bootstrap is ont being used
-  output_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history.dat
-  bootstrap_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1_hour.dat
+  output_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history.dat  # this is the prefix of a file e.g. "history_frame_size_1_hour.dat" is saved to
+  bootstrap_data: C:\Users\Anthony\PycharmProjects\SilentWealth\temp\history_frame_size_1_hour.dat # this is where I load historical data from for bootstrap analysis
   bootstrap_sample_size: 168  # e.g., 168 hours in a week
-  bootstrap_number_samples: 1000  # select 200 1-week (168 hours) samples
+  bootstrap_number_samples: 50  # select 200 1-week (168 hours) samples

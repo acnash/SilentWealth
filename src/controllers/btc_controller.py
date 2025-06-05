@@ -102,40 +102,40 @@ class BTCController(Controller):
                     for ema_medium in self.silent_wealth_inputs.ema_medium:
                         for ema_long in self.silent_wealth_inputs.ema_long:
                             for rsi in self.silent_wealth_inputs.rsi:
-                                for rsi_top in self.silent_wealth_inputs.rsi_top:
-                                    for rsi_bottom in self.silent_wealth_inputs.rsi_bottom:
-                                        for atr in self.silent_wealth_inputs.atr:
-                                            print("************************************************************")
-                                            print(f"ema_short: {ema_short}")
-                                            print(f"ema_medium: {ema_medium}")
-                                            print(f"ema_long: {ema_long}")
-                                            print(f"rsi: {rsi}")
-                                            print(f"rsi_top: {rsi_top}")
-                                            print(f"rsi_bottom: {rsi_bottom}")
-                                            print(f"atr: {atr}")
-                                            self._scheduled_task(
-                                                None,
-                                                None,
-                                                self.ticker_name,
-                                                None,
-                                                self.frame_size,
-                                                self.unit_type,
-                                                self.dollar_amount,
-                                                self.commission_pot_child,
-                                                BTCController.BTC_PAXOS_START_TIME,
-                                                BTCController.BTC_PAXOS_END_TIME,
-                                                ema_short,
-                                                ema_medium,
-                                                ema_long,
-                                                self.vwap,
-                                                rsi,
-                                                rsi_top,
-                                                rsi_bottom,
-                                                atr,
-                                                self.output_data,
-                                                self.test_mode,
-                                                self.test_data,
-                                                bootstrap)
+                                #for rsi_top in self.silent_wealth_inputs.rsi_top:
+                                #    for rsi_bottom in self.silent_wealth_inputs.rsi_bottom:
+                                for atr in self.silent_wealth_inputs.atr:
+                                    print("************************************************************")
+                                    print(f"ema_short: {ema_short}")
+                                    print(f"ema_medium: {ema_medium}")
+                                    print(f"ema_long: {ema_long}")
+                                    print(f"rsi: {rsi}")
+                                    print(f"rsi_top: {self.rsi_top}")
+                                    print(f"rsi_bottom: {self.rsi_bottom}")
+                                    print(f"atr: {atr}")
+                                    self._scheduled_task(
+                                        None,
+                                        None,
+                                        self.ticker_name,
+                                        None,
+                                        self.frame_size,
+                                        self.unit_type,
+                                        self.dollar_amount,
+                                        self.commission_pot_child,
+                                        BTCController.BTC_PAXOS_START_TIME,
+                                        BTCController.BTC_PAXOS_END_TIME,
+                                        ema_short,
+                                        ema_medium,
+                                        ema_long,
+                                        self.vwap,
+                                        rsi,
+                                        self.rsi_top,
+                                        self.rsi_bottom,
+                                        atr,
+                                        self.output_data,
+                                        self.test_mode,
+                                        self.test_data,
+                                        bootstrap)
 
             else:
                 self._scheduled_task(

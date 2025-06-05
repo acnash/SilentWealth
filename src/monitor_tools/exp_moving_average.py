@@ -20,7 +20,7 @@ class ExpMovingAverage:
                 durationStr='365 D',
                 barSizeSetting=f'{str(frame_size)} {unit_type}',
                 whatToShow='MIDPOINT',
-                useRTH=True
+                useRTH=False
             )
 
         else:

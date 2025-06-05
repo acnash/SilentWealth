@@ -54,5 +54,6 @@ class RSI:
             rsi = 100 - (100 / (1 + rs))
 
         self.df["rsi"] = rsi
+        self.df['RSI_recently_below_50'] = (self.df['rsi'].shift(1) < 50) | (self.df['rsi'].shift(2) < 50)
 
         return self.df

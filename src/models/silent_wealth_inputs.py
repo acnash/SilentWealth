@@ -96,7 +96,7 @@ class SilentWealthInputs:
             print(f"...setting EMA medium {self.ema_medium}.")
             self.ema_long = monitor_conditions.get("ema_long", 200)
             print(f"...setting EMA long {self.ema_long}.")
-            self.vwap = monitor_conditions.get("vwap", True)
+            self.vwap = monitor_conditions.get("vwap", 0)
             print(f"...setting vwap {self.vwap}.")
             self.rsi = monitor_conditions.get("rsi", 0)
             print(f"...setting RSI {self.rsi}.")
@@ -132,14 +132,15 @@ class SilentWealthInputs:
                     exit()
 
     def prep_bootstrap(self):
-        self.ema_short = [9, 12, 15]
-        self.ema_medium = [18, 21, 24]
-        self.ema_long = [50, 75, 100]
+        self.ema_short = [9, 12, 14]
+        self.ema_medium = [16, 18, 21]
+        self.ema_long = [100, 150]
 
-        self.rsi = [9, 12, 15]
-        self.rsi_top = [70]
-        self.rsi_bottom = [50]
+        self.rsi = [9, 12, 14]
+        #self.rsi_top = [70]
+        #self.rsi_bottom = [50]
 
-        self.atr = [9, 12, 15]
+        #self.vwap = [9, 12, 14]
+        self.atr = [9, 12, 14]
 
 
