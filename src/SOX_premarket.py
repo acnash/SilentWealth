@@ -21,11 +21,23 @@ def main():
     change_dict = historical_data_controller.get_fyahoo_postmarket_change()
     marketcap_dict = historical_data_controller.get_fyahoo_marketcap()
 
-    normalized_changes = {
-        ticker: change / marketcap_dict[ticker]
-        for ticker, change in change_dict.items()
-        if ticker in marketcap_dict and marketcap_dict[ticker] != 0
-    }
+    normalized_changes = {}  # Initialize an empty dictionary
+
+    for ticker, change in change_dict.items():
+        if not change:
+            continue
+        # Check if ticker exists in marketcap_dict and marketcap is not zero
+        if ticker in marketcap_dict and marketcap_dict[ticker] != 0:
+            # Calculate normalized change by dividing change by marketcap
+            normalized_change = change / marketcap_dict[ticker]
+            # Add result to the dictionary
+            normalized_changes[ticker] = normalized_change
+
+    #normalized_changes = {
+    #    ticker: change / marketcap_dict[ticker]
+    #    for ticker, change in change_dict.items()
+    #    if ticker in marketcap_dict and marketcap_dict[ticker] != 0
+    #}
 
     # Total market cap of all tracked stocks
     total_market_cap = sum(marketcap_dict[ticker] for ticker in normalized_changes)
