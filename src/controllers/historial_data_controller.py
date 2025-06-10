@@ -11,11 +11,19 @@ class HistorialDataController():
 
     def get_fyahoo_postmarket_change(self):
         results = {}
+        #data = yf.download(self.tickers, period="1d")
+        #for ticker in self.tickers:
+        #    ticker_fyahoo = yf.Ticker(ticker)
+        #    info = ticker_fyahoo.info
+
+        #    time.sleep(2)
+        #    results[ticker] = info.get("postMarketChangePercent")
+        batch = yf.Tickers(' '.join(self.tickers))
+
         for ticker in self.tickers:
-            ticker_fyahoo = yf.Ticker(ticker)
-            info = ticker_fyahoo.info
-            time.sleep(1)
-            results[ticker] = info.get("postMarketChangePercent")
+            info = batch.tickers[ticker].info
+            results[ticker] = info.get('postMarketChangePercent', None)
+
         return results
 
     def get_fyahoo_marketcap(self):
