@@ -184,10 +184,12 @@ class Controller(ABC):
                 min_commission = np.min(bootstrap_total_commission)
                 max_commission = np.max(bootstrap_total_commission)
                 stdev_commission = np.std(bootstrap_total_commission)
+                median_commission = np.median(bootstrap_total_commission)
                 mean_running_amount = np.mean(bootstrap_running_amount)
                 min_running_amount = np.min(bootstrap_running_amount)
                 max_running_amount = np.max(bootstrap_running_amount)
                 stdev_running_amount = np.std(bootstrap_running_amount)
+                median_running_amount = np.median(bootstrap_running_amount)
 
                 #mean_total_profit = np.mean(bootstrap_net_profit)
 
@@ -195,19 +197,19 @@ class Controller(ABC):
                     with open("../temp/bs_results.txt", "w", newline="") as file:
                         writer = csv.writer(file)
                         writer.writerow(["ema_short", "ema_medium", "ema_long", "rsi", "rsi_top", "rsi_bottom", "atr",
-                                         "mean_commission", "min_commission", "max_commission", "stdev_commission",
-                                         "mean_running_amount", "min_running_amount", "max_running_amount", "stdev_running_amount"])
+                                         "mean_commission", "min_commission", "max_commission", "stdev_commission", "median_commission",
+                                         "mean_running_amount", "min_running_amount", "max_running_amount", "stdev_running_amount", "median_running_amount"])
                         writer.writerow(
                             [ema_short, ema_medium, ema_long, rsi, rsi_top, rsi_bottom, atr_period,
-                             mean_commission, min_commission, max_commission, stdev_commission,
-                             mean_running_amount, min_running_amount, max_running_amount, stdev_running_amount])
+                             mean_commission, min_commission, max_commission, stdev_commission, median_commission,
+                             mean_running_amount, min_running_amount, max_running_amount, stdev_running_amount, median_running_amount])
                 else:
                     with open("../temp/bs_results.txt", "a", newline="") as file:
                         writer = csv.writer(file)
                         writer.writerow(
                             [ema_short, ema_medium, ema_long, rsi, rsi_top, rsi_bottom, atr_period,
-                             mean_commission, min_commission, max_commission, stdev_commission,
-                             mean_running_amount, min_running_amount, max_running_amount, stdev_running_amount])
+                             mean_commission, min_commission, max_commission, stdev_commission, median_commission,
+                             mean_running_amount, min_running_amount, max_running_amount, stdev_running_amount, median_running_amount])
 
                 #lists = [bootstrap_total_profit, bootstrap_total_commission, bootstrap_net_profit]
                 #plot_names = ["Gross Profit", "Total Commission", "Net Profit"]
@@ -344,6 +346,13 @@ class Controller(ABC):
         ema = ExpMovingAverage(ib, contract, frame_size, unit_type, ticker_name, output_data)
         df = ema.calculate_exp_moving_average([ema_short, ema_medium, ema_long], test_df)
 
+        # add VWAP data
+        #if vwap > 0:
+        #    tp = df['close']
+        #    df[f'VWAP_{vwap}'] = (tp * df['volume']).rolling(window=14).sum() / df['volume'].rolling(window=vwap).sum()
+        #else:
+        #    df['VWAP_0'] = 0
+
         # calculate the Average True Range
         if atr_period > 0:
             high = df["high"]
@@ -377,10 +386,13 @@ class Controller(ABC):
             ema_short_value = row[f"{ema_short}_day_EMA"]
             ema_medium_value = row[f"{ema_medium}_day_EMA"]
             ema_long_value = row[f"{ema_long}_day_EMA"]
+            #vwap_value = row[f"VWAP_{vwap}"]
             if rsi > 0:
                 rsi_value = row["rsi"]
+                rsi_bullish = row["RSI_recently_below_50"]
             else:
                 rsi_value = 0
+                rsi_bullish = True
 
             if atr_period > 0:
                 if row[f"ATR_{atr_period}"] > earlier_atr:
@@ -398,9 +410,9 @@ class Controller(ABC):
             elif close < ema_medium:
                 # print(f"......{close} < {ema_medium_value} -- close < ema_medium_value --> SELL")
                 action = Controller.SELL
-            elif ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
+            elif ema_short_value > ema_medium_value and ema_medium_value > ema_long_value and atr_value:
                 if rsi_value > 0:
-                    if rsi_bottom < rsi_value <= rsi_top:
+                    if rsi_bullish and rsi_value > rsi_bottom and rsi_value < rsi_top: # rsi_bottom < rsi_value <= rsi_top:
                         # print(
                         #    f"......{rsi_bottom} < {rsi_value} <= {rsi_top} -- rsi_bottom < rsi_value <= rsi_top --> BUY")
                         action = Controller.BUY
@@ -417,6 +429,7 @@ class Controller(ABC):
                 #    f"......{ema_short_value} > {ema_medium_value} and {ema_short_value} > {ema_long_value} and {atr_value} -- ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value --> HOLD")
                 action = Controller.HOLD
 
+
             if action == Controller.HOLD:
                 # print("Holding")
                 pass
@@ -425,7 +438,7 @@ class Controller(ABC):
                     # print("Buying")
                     bought_btc = running_amount / close
                     #running_amount = running_amount - bought_btc
-                    running_amount = 0 # I put everything in
+                    running_amount = 0  # I put everything in
                     test_hold_security = True
                 else:
                     pass
@@ -455,8 +468,8 @@ class Controller(ABC):
     def __silent_wealth_start_live(self, ib,
                                    contract,
                                    frame_size,
-                                   unit_type,
                                    ticker_name,
+                                   unit_type,
                                    output_data,
                                    ema_short,
                                    ema_medium,
@@ -508,7 +521,7 @@ class Controller(ABC):
         elif close < ema_medium:
             print(f"......{close} < {ema_medium_value} -- close < ema_medium_value --> SELL")
             return Controller.SELL
-        elif ema_short_value > ema_medium_value and ema_short_value > ema_long_value and atr_value:
+        elif ema_short_value > ema_medium_value and ema_medium_value > ema_long_value and atr_value:
             if rsi_value > 0:
                 if rsi_bottom < rsi_value <= rsi_top:
                     print(
