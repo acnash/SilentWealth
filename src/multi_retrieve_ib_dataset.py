@@ -9,9 +9,9 @@ import time, random
 from datetime import datetime, timedelta
 import pandas as pd
 
-TICKERS = ["GOOGL","META","NVDA","AMZN","QBTS","TSLA"]
+TICKERS = ["GOOGL","MSFT","JNJ","PG","KO","VZ","PEP","WMT","PFE"]
 BASE_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
-OUTFILE = "ALL_PRICES.txt"
+OUTFILE = "STABLE_PRICES.txt"
 MIN_YEARS = 8
 
 def stooq_symbol(ticker: str) -> str: return f"{ticker.lower()}.us"

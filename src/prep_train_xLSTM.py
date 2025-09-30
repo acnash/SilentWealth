@@ -1,7 +1,10 @@
-
 # ===========================================================
 # combined_prep_and_tpe_train_xlstmts_multiticker.py
 # Full pipeline: multi-ticker preprocessing + TPE tuning + verdict
+# Changes:
+#  - Training & validation: denoised -> normalized (Scaler fitted on train only)
+#  - Test: NOT denoised, but normalized (scaled using the train scaler)
+#  - Removed plotting code
 # ===========================================================
 
 import os, math, json
@@ -9,7 +12,6 @@ import numpy as np
 import pandas as pd
 import pywt
 from typing import Tuple, List, Dict, Any
-import matplotlib.pyplot as plt
 from darts import TimeSeries
 from darts.dataprocessing.transformers import Scaler
 
@@ -23,7 +25,7 @@ from optuna.samplers import TPESampler
 # ----------------------
 # Preprocessing config
 # ----------------------
-INPUT_PATH = "ALL_PRICES.txt"         # ← unified file with multiple tickers
+INPUT_PATH = "STABLE_PRICES.txt"         # ← unified file with multiple tickers
 DATE_COL = "Date"
 TICKER_COL = "Ticker"
 TARGET_COL = "Adj Close"
@@ -37,11 +39,6 @@ WLEVEL = None
 THRESH_MODE = "soft"
 VERBOSE = True
 
-# Plot config
-PLOT_COLUMNS = ["Adj Close"]
-PLOT_DIR = "plots_raw_vs_denoised"
-SHOW_PLOTS = False  # True to display
-
 # ----------------------
 # Model/training fixed config
 # ----------------------
@@ -49,7 +46,7 @@ INPUT_SIZE = 1          # feed only TARGET_COL (univariate)
 EMBED_DIM = 64
 OUTPUT_SIZE = 1
 WEIGHT_DECAY = 0.0
-MAX_EPOCHS = 300
+MAX_EPOCHS = 200
 PATIENCE = 30
 CLIP_MAX_NORM = 1.0
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -69,6 +66,7 @@ SLSTM_FF_FACTOR = 1.1
 SEQ_LEN_CHOICES = [100, 150, 200]
 LR_CHOICES = [1e-4, 5e-4, 1e-4]
 BATCH_CHOICES = [8, 16, 32]
+EMBED_DIM_CHOICES = [32, 64, 128, 256]
 
 # ------------------------------------------------------------
 # Utilities
@@ -160,22 +158,6 @@ def build_windows_from_multiticker(df: pd.DataFrame, window: int, horizon: int=1
     X_all = np.concatenate(Xs, axis=0); y_all = np.concatenate(ys, axis=0)
     return X_all, y_all
 
-def plot_raw_vs_denoised(df_raw: pd.DataFrame, df_denoised: pd.DataFrame, cols: List[str], out_dir: str, show: bool=True, ticker: str="") -> None:
-    os.makedirs(out_dir, exist_ok=True)
-    tag = f"_{ticker}" if ticker else ""
-    for c in cols:
-        if c not in df_raw.columns or c not in df_denoised.columns: continue
-        fig = plt.figure(figsize=(11,5))
-        plt.plot(df_raw.index, df_raw[c].values, label=f"{c} (raw)")
-        plt.plot(df_denoised.index, df_denoised[c].values, label=f"{c} (denoised)")
-        plt.title(f"{ticker} {c}: raw vs denoised (wavelet={WAVELET}, mode={THRESH_MODE})")
-        plt.xlabel("Date"); plt.ylabel(c); plt.legend(); plt.tight_layout()
-        out_png = os.path.join(out_dir, f"{ticker}_{c.replace(' ','_').lower()}_raw_vs_denoised.png")
-        plt.savefig(out_png, dpi=150)
-        if show: plt.show()
-        else: plt.close(fig)
-        log(f"Saved plot: {out_png}")
-
 # ------------------------------------------------------------
 # Model definition (xLSTM-TS style)
 # ------------------------------------------------------------
@@ -262,7 +244,7 @@ def load_scaled_split_df(path: str) -> pd.DataFrame:
 def make_arrays(seq_len: int) -> Dict[str, np.ndarray]:
     train_df = load_scaled_split_df("scaled_train_businessB_denoised.csv")
     val_df   = load_scaled_split_df("scaled_val_businessB_denoised.csv")
-    test_df  = load_scaled_split_df("scaled_test_businessB_denoised.csv")
+    test_df  = load_scaled_split_df("scaled_test_businessB.csv")  # test is scaled but not denoised
     Xtr, ytr = build_windows_from_multiticker(train_df, window=seq_len, horizon=1)
     Xva, yva = build_windows_from_multiticker(val_df,   window=seq_len, horizon=1)
     Xte, yte = build_windows_from_multiticker(test_df,  window=seq_len, horizon=1)
@@ -316,27 +298,55 @@ def preprocess_and_save() -> None:
         g_num = g.drop(columns=[TICKER_COL]).copy()
         log("Clean nulls"); g_num = g_num.replace([np.inf, -np.inf], np.nan).dropna(how="all"); g_num = g_num.interpolate(method="time").ffill().bfill()
         log("Align to business days"); g_num = ensure_business_days(g_num)
-        log("Wavelet denoise"); g_den = wavelet_denoise_df(g_num, keep_cols)
-        if SHOW_PLOTS: plot_raw_vs_denoised(g_num, g_den, PLOT_COLUMNS, os.path.join(PLOT_DIR, ticker), SHOW_PLOTS, ticker=ticker)
-        log("To Darts TimeSeries"); ts = darts_series_from_df(g_den, keep_cols)
-        log("Split 86/7/7"); train_ts, val_ts, test_ts = split_series_by_fraction(ts, TRAIN_FRACTION, VAL_FRACTION)
-        log("Scale (fit on train only)"); scaler, [train_s, val_s, test_s] = scale_with_darts(train_ts, [val_ts, test_ts])
-        train_df = ts_to_df(train_s); val_df = ts_to_df(val_s); test_df = ts_to_df(test_s)
+
+        # DENOISE for train & val — keep the RAW for test (per your instruction)
+        log("Wavelet denoise (for train & val)")
+        g_den = wavelet_denoise_df(g_num, keep_cols)
+
+        # Build Darts time series for both denoised and raw versions (same index/length)
+        ts_den = darts_series_from_df(g_den, keep_cols)
+        ts_raw = darts_series_from_df(g_num, keep_cols)
+
+        # Split both (positional split -> same split points)
+        log("Split 86/7/7")
+        train_den, val_den, test_den_from_den = split_series_by_fraction(ts_den, TRAIN_FRACTION, VAL_FRACTION)
+        train_raw, val_raw, test_raw = split_series_by_fraction(ts_raw, TRAIN_FRACTION, VAL_FRACTION)
+
+        # Fit scaler on denoised train and transform: train_den, val_den, AND test_raw (test is scaled but not denoised)
+        log("Scale (fit on denoised train only). Test will be SCALED but NOT denoised.")
+        scaler, scaled_list = scale_with_darts(train_den, [val_den, test_raw])
+        # scaled_list = [scaled_train, scaled_val, scaled_test_raw_scaled]
+        train_s = scaled_list[0]
+        val_s   = scaled_list[1] if len(scaled_list) > 1 else None
+        test_s  = scaled_list[2] if len(scaled_list) > 2 else None
+
+        # Convert back to DataFrames for saving/aggregation
+        train_df = ts_to_df(train_s)
+        val_df   = ts_to_df(val_s) if val_s is not None else pd.DataFrame(columns=keep_cols)
+        test_df  = ts_to_df(test_s) if test_s is not None else pd.DataFrame(columns=keep_cols)
+
+        # Attach ticker column and append to master lists
         for df, bucket in [(train_df, train_frames), (val_df, val_frames), (test_df, test_frames)]:
+            if df is None or df.empty:
+                # still keep an empty placeholder (skip appending)
+                continue
+            df = df.reset_index().rename(columns={"index": DATE_COL})
             df[TICKER_COL] = ticker
             bucket.append(df)
 
         log(f"Lengths -> train:{len(train_df)}, val:{len(val_df)}, test:{len(test_df)}")
 
     if len(train_frames) == 0: raise RuntimeError("No training data assembled.")
-    train_all = pd.concat(train_frames).reset_index().rename(columns={"index": DATE_COL}).sort_values([DATE_COL, TICKER_COL])
-    val_all   = pd.concat(val_frames)  .reset_index().rename(columns={"index": DATE_COL}).sort_values([DATE_COL, TICKER_COL]) if val_frames else pd.DataFrame(columns=[DATE_COL, TICKER_COL] + keep_cols)
-    test_all  = pd.concat(test_frames) .reset_index().rename(columns={"index": DATE_COL}).sort_values([DATE_COL, TICKER_COL]) if test_frames else pd.DataFrame(columns=[DATE_COL, TICKER_COL] + keep_cols)
+    train_all = pd.concat(train_frames).reset_index(drop=True).sort_values([DATE_COL, TICKER_COL])
+    val_all   = pd.concat(val_frames)  .reset_index(drop=True).sort_values([DATE_COL, TICKER_COL]) if val_frames else pd.DataFrame(columns=[DATE_COL, TICKER_COL] + keep_cols)
+    test_all  = pd.concat(test_frames) .reset_index(drop=True).sort_values([DATE_COL, TICKER_COL]) if test_frames else pd.DataFrame(columns=[DATE_COL, TICKER_COL] + keep_cols)
 
-    # Save scaled splits (contain Ticker & features; windowing will use TARGET_COL per ticker)
+    # Save scaled splits:
+    # - train/val are denoised then scaled
+    # - test is RAW (not denoised) but SCALED using the train scaler
     train_all.to_csv("scaled_train_businessB_denoised.csv", index=False)
     val_all.to_csv("scaled_val_businessB_denoised.csv", index=False)
-    test_all.to_csv("scaled_test_businessB_denoised.csv", index=False)
+    test_all.to_csv("scaled_test_businessB.csv", index=False)
 
     log(f"Saved splits: train={len(train_all)}, val={len(val_all)}, test={len(test_all)}")
 
@@ -347,12 +357,23 @@ def objective(trial: optuna.Trial) -> float:
     seq_len   = trial.suggest_categorical("seq_len", SEQ_LEN_CHOICES)
     lr        = trial.suggest_categorical("lr", LR_CHOICES)
     batch_sz  = trial.suggest_categorical("batch_size", BATCH_CHOICES)
+    embed_dim = trial.suggest_categorical("embed_dim", EMBED_DIM_CHOICES)   # NEW
 
     arrs = make_arrays(seq_len)
+
+    # DIAGNOSTIC (optional)
+    log(f"DEBUG: Xtr.shape={arrs['Xtr'].shape}, Xva.shape={arrs['Xva'].shape}, Xte.shape={arrs['Xte'].shape}")
+
+    if arrs['Xtr'].shape[0] == 0 or arrs['Xva'].shape[0] == 0:
+        log("No training or validation windows available for this seq_len -> pruning trial.")
+        raise optuna.TrialPruned()
+
     train_loader, val_loader, _ = make_loaders(arrs, batch_sz)
 
-    model = xLSTM_TS(input_size=INPUT_SIZE, d_model=EMBED_DIM, output_size=OUTPUT_SIZE).to(DEVICE)
+    # construct model with sampled embedding dimension
+    model = xLSTM_TS(input_size=INPUT_SIZE, d_model=embed_dim, output_size=OUTPUT_SIZE).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=WEIGHT_DECAY)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=5, verbose=False, min_lr=1e-8)
     loss_fn = nn.MSELoss()
 
     best_val = float("inf"); best_state = None; epochs_no_improve = 0
@@ -360,26 +381,47 @@ def objective(trial: optuna.Trial) -> float:
         tr_loss = train_one_epoch(model, train_loader, opt, loss_fn)
         va_loss = evaluate(model, val_loader, loss_fn)
         trial.report(va_loss, step=epoch)
+
+        # step scheduler by validation metric (if you want scheduling)
+        scheduler.step(va_loss)
+
         if trial.should_prune(): raise optuna.TrialPruned()
+
         if va_loss < best_val - 1e-8:
-            best_val = va_loss; best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}; epochs_no_improve = 0
+            best_val = va_loss
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            epochs_no_improve = 0
         else:
             epochs_no_improve += 1
-        if epochs_no_improve >= PATIENCE: break
+        if epochs_no_improve >= PATIENCE:
+            break
 
-    if best_state is not None: trial.set_user_attr("best_state", best_state)
+    if best_state is not None:
+        trial.set_user_attr("best_state", best_state)
     return float(best_val)
+
 
 def train_eval_best(study: optuna.Study) -> Dict[str, Any]:
     best_trial = study.best_trial
-    hp = {"seq_len": best_trial.params["seq_len"], "lr": best_trial.params["lr"], "batch_size": best_trial.params["batch_size"], "optimizer": "Adam", "loss": "MSE", "max_epochs": MAX_EPOCHS, "patience": PATIENCE, "clip_max_norm": CLIP_MAX_NORM}
+    hp = {
+        "seq_len": best_trial.params["seq_len"],
+        "lr": best_trial.params["lr"],
+        "batch_size": best_trial.params["batch_size"],
+        "embed_dim": best_trial.params.get("embed_dim", EMBED_DIM),  # NEW: pick best embed_dim (fallback to global)
+        "optimizer": "Adam",
+        "loss": "MSE",
+        "max_epochs": MAX_EPOCHS,
+        "patience": PATIENCE,
+        "clip_max_norm": CLIP_MAX_NORM
+    }
 
     arrs = make_arrays(hp["seq_len"])
     train_loader, val_loader, test_loader = make_loaders(arrs, hp["batch_size"])
 
-    model = xLSTM_TS(input_size=INPUT_SIZE, d_model=EMBED_DIM, output_size=OUTPUT_SIZE).to(DEVICE)
+    model = xLSTM_TS(input_size=INPUT_SIZE, d_model=hp["embed_dim"], output_size=OUTPUT_SIZE).to(DEVICE)
     best_state = best_trial.user_attrs.get("best_state", None)
-    if best_state is not None: model.load_state_dict(best_state, strict=True)
+    if best_state is not None:
+        model.load_state_dict(best_state, strict=True)
     loss_fn = nn.MSELoss()
 
     val_mse  = evaluate(model, val_loader, loss_fn)
@@ -390,8 +432,8 @@ def train_eval_best(study: optuna.Study) -> Dict[str, Any]:
     else: baseline_mse = float("nan")
 
     os.makedirs("artifacts", exist_ok=True)
-    torch.save(model.state_dict(), os.path.join("artifacts", "xlstm_ts_best_state_dict.pt"))
-    with open(os.path.join("artifacts", "xlstm_ts_best_hparams.json"), "w") as f:
+    torch.save(model.state_dict(), os.path.join("artifacts", "xlstm_ts_best_state_dict_STABLE_PRICES.pt"))
+    with open(os.path.join("artifacts", "xlstm_ts_best_hparams_STABLE_PRICES.json"), "w") as f:
         json.dump({"best_params": hp, "best_val_mse": study.best_value, "val_mse": val_mse, "test_mse": test_mse, "baseline_test_mse": baseline_mse}, f, indent=2)
 
     verdict = verdict_from_metrics(test_mse, baseline_mse)
@@ -404,8 +446,8 @@ def train_eval_best(study: optuna.Study) -> Dict[str, Any]:
     print(f"Baseline (persistence) Test MSE: {baseline_mse:.6f}")
     print(f"Verdict: {verdict}")
     print("Saved:")
-    print(" - artifacts/xlstm_ts_best_state_dict.pt")
-    print(" - artifacts/xlstm_ts_best_hparams.json")
+    print(" - artifacts/xlstm_ts_best_state_dict_STABLE_PRICES.pt")
+    print(" - artifacts/xlstm_ts_best_hparams_STABLE_PRICES.json")
 
     return {"hp": hp, "val_mse": val_mse, "test_mse": test_mse, "baseline_mse": baseline_mse, "verdict": verdict}
 
