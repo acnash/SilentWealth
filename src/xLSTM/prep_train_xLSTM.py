@@ -79,10 +79,15 @@ SLSTM_FF_FACTOR = 1.1
 # ----------------------
 # TPE search space
 # ----------------------
-SEQ_LEN_CHOICES = [100, 150, 200]
-LR_CHOICES = [1e-4, 5e-4, 1e-3]
-BATCH_CHOICES = [8, 16, 32]
-EMBED_DIM_CHOICES = [32, 64, 128, 256]
+SEQ_LEN_CHOICES = [60, 100, 150, 200, 256]
+#LR_CHOICES = [1e-4, 5e-4, 1e-3]
+BATCH_CHOICES = [8, 16, 32, 64]
+EMBED_DIM_CHOICES = [32, 64, 128, 256, 384]
+LR_RANGE = (1e-5, 3e-3)  # lower, upper
+
+def sample_lr(trial):
+    # log-uniform learning rate in [1e-5, 3e-3]
+    return trial.suggest_float("lr", LR_RANGE[0], LR_RANGE[1], log=True)
 
 # ------------------------------------------------------------
 # Utilities
@@ -488,7 +493,8 @@ def preprocess_and_save() -> None:
 # ------------------------------------------------------------
 def objective(trial: optuna.Trial) -> float:
     seq_len   = trial.suggest_categorical("seq_len", SEQ_LEN_CHOICES)
-    lr        = trial.suggest_categorical("lr", LR_CHOICES)
+    #lr        = trial.suggest_categorical("lr", LR_CHOICES)
+    lr = sample_lr(trial)
     batch_sz  = trial.suggest_categorical("batch_size", BATCH_CHOICES)
     embed_dim = trial.suggest_categorical("embed_dim", EMBED_DIM_CHOICES)
 
