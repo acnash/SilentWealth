@@ -1,10 +1,100 @@
-# SilentWealth
-- --
+# xLSTM-Timeseries
 
-## To-do list
-1. See notepad.
-2. Immediate sell if price drops below medium exponential moving average
-- --
+See src/xLSTM for code. Calculates the next-day-ahead price for an asset. Use in conjunction with strong fundamentals and technical analysis to judge when to trade.
+
+## Running order
+
+- `multi_retrieve_ib_dataset.py` - builds historical one-day price datasets based on ticker names e.g. NVDA, GOOGL etc.
+- `prep_train_xLSTM.py` - trains the xLSTM model using historical price data. Generates train, validate, and test data sets.
+- `predict_xLSTM.py` - given the trained model and test data, retrieves the nest day price for each company.
+
+## xLSTM-TS model methodology
+
+# Methods
+
+* **Data source & schema**
+
+  * Input file: `STABLE_PRICES.txt` (multi-ticker table with columns: `Date`, `Ticker`, OHLCV; target is `Close`).
+  * Flexible CSV/TXT parsing with automatic delimiter detection; `Date` coerced to `datetime` and sorted.
+
+* **Business-day alignment & cleaning**
+
+  * Per-ticker time series aligned to a business-day index.
+  * Missing values handled by time interpolation → forward-fill → back-fill.
+  * All infinities and all-NaN rows removed before alignment.
+
+* **Leak-safe split & denoising**
+
+  * Temporal split per ticker: **Train 86%**, **Validation 7%**, **Test (remainder)**.
+  * **Wavelet denoising** (Daubechies-4, soft threshold) applied **only to train & validation** segments; **test remains raw**.
+  * Denoising is split-local to prevent look-ahead leakage.
+
+* **Scaling (per ticker)**
+
+  * Darts `Scaler` Min–Max ([0,1]) **fit on denoised train only**.
+  * The same scaler is applied to **denoised validation** and **raw test** segments.
+  * Per-ticker train-denoised **min/max for `Close`** recorded in `artifacts/scaling_params.csv`.
+
+* **Windowing (supervised samples)**
+
+  * Univariate modeling of `Close` only: inputs (X) are shape ((N, \text{seq_len}, 1)).
+  * Horizon **H=1** (next-day close).
+  * Windows built per ticker within each split; counts reported in `artifacts/window_counts_seqLEN.csv`.
+
+* **Model: xLSTM-TS block**
+
+  * Input linear embedding → **mLSTM block** → **sLSTM block** → **mLSTM block** → layer norm + linear head.
+  * Each block stacks: LayerNorm → causal depthwise Conv1d (kernels: m=4, s=2) → Multi-Head Attention (2 heads) → LSTM → projection/FF sublayer → LayerNorm with residuals.
+  * Tunable embedding dimension; default shown as 64.
+
+* **Training objective & optimization**
+
+  * Loss: **MSE** (regression on scaled target).
+  * Optimizer: **Adam**; learning rate scheduled by **ReduceLROnPlateau** (factor 0.5, patience 10, floor (1e{-8})).
+  * **Gradient clipping**: max-norm 1.0.
+  * **Early stopping** via validation loss with **patience 30**, up to **200 epochs**.
+  * Determinism: global seed (42); GPU used if available.
+
+* **Hyperparameter search (Optuna TPE)**
+
+  * Search space:
+
+    * `seq_len` ∈ {60, 100, 150, 200, 256}
+    * `batch_size` ∈ {8, 16, 32, 64}
+    * `embed_dim` ∈ {32, 64, 128, 256, 384}
+    * `lr` ~ log-uniform in ([1e{-5}, 3e{-3}])
+  * Sampler: **TPESampler** (multivariate, seeded).
+  * Best trial’s state dict and learning curve saved; full trials exported to `artifacts/study_trials.csv`.
+
+* **Evaluation & baselines**
+
+  * Splits evaluated with DataLoaders (no shuffling except train).
+  * **Naïve persistence baseline**: ( \hat{y}*t = x*{t-1} ) (last observed close).
+  * Metrics (overall + per ticker): **MSE, RMSE, MAE, MAPE, sMAPE, (R^2)**.
+  * **Diebold–Mariano test** (squared-error loss, (h{=}1)) with Newey–West variance for model vs naïve.
+  * Predictions & errors exported for **validation** and **test**:
+
+    * `artifacts/predictions_val.csv`, `artifacts/predictions_test.csv`
+    * `artifacts/metrics_val_overall.json`, `artifacts/metrics_test_overall.json`
+    * `artifacts/metrics_val_by_ticker.csv`, `artifacts/metrics_test_by_ticker.csv`
+
+* **Artifacts & reproducibility**
+
+  * Preprocessing report: `artifacts/data_config.json`, `artifacts/split_report.csv`, `artifacts/scaling_params.csv`.
+  * Scaled splits: `scaled_train_businessB_denoised.csv`, `scaled_val_businessB_denoised.csv`, `scaled_test_businessB.csv`.
+  * Best model: `artifacts/xlstm_ts_best_state_dict_STABLE_PRICES.pt` and `artifacts/xlstm_ts_best_hparams_STABLE_PRICES.json`.
+  * Learning curve for best trial: `artifacts/learning_curve_best.csv`.
+
+* **Runtime details**
+
+  * Batch loading via PyTorch `DataLoader` (train shuffled; val/test not shuffled).
+  * Device-agnostic execution (CPU/GPU).
+  * Verbose logging toggle with `VERBOSE=True`.
+
+
+# SilentWealth
+
+Draft project. Day trades bitcoin using an Interactive Broker account and the Interactive Broker Gateway tool.
 
 ## Arguments
 - `--ticker_name` the trade ticker name e.g. `BP.`, `LLOY`, `SOXS`, `SOXL`, `BTC`. Always required.
