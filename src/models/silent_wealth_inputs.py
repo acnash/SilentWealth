@@ -24,7 +24,7 @@ class SilentWealthInputs:
 
         self.platform = account_data.get("platform", "ibg")
         self.platform = self.platform.lower()
-        print(f"... using platform {self.platform}.")
+        print(f"...using platform {self.platform}.")
 
         if self.platform == "ibg" and self.account == "paper":
             self.port = SilentWealthInputs.IBG_PAPER_PORT
@@ -52,6 +52,10 @@ class SilentWealthInputs:
             print(f"...on the {self.exchange} exchange.")
             self.frame_size = stock["frame_size"]
             print(f"...resolution size {self.frame_size}.")
+            self.unit_type = stock["unit_type"]
+            print(f"...unit type {self.unit_type}")
+            self.commission_pot = stock.get("commission_pot", 200)
+            print(f"...commission pot size ${self.commission_pot}")
             if self.ticker_name == "BTC" or self.ticker_name == "SOL" or self.ticker_name == "ETH":
                 self.dollar_amount = stock["dollar_amount"]
                 print(f"...trading with {self.dollar_amount} for bitcoin.\n")
@@ -92,21 +96,51 @@ class SilentWealthInputs:
             print(f"...setting EMA medium {self.ema_medium}.")
             self.ema_long = monitor_conditions.get("ema_long", 200)
             print(f"...setting EMA long {self.ema_long}.")
-            self.vwap = monitor_conditions.get("vwap", 9)
+            self.vwap = monitor_conditions.get("vwap", 0)
             print(f"...setting vwap {self.vwap}.")
-            self.rsi = monitor_conditions.get("rsi", 14)
+            self.rsi = monitor_conditions.get("rsi", 0)
             print(f"...setting RSI {self.rsi}.")
             self.rsi_top = monitor_conditions.get("rsi_top", 0)
             print(f"...setting RSI top condition {self.rsi_top}.")
             self.rsi_bottom = monitor_conditions.get("rsi_bottom", 0)
             print(f"...setting RSI bottom condition {self.rsi_bottom}.")
             self.atr = monitor_conditions.get("atr", 0)
-            print(f"...setting ATR duration {self.atr}.")
-            self.anchor_distance = monitor_conditions.get("anchor_distance", 0)
-            print(f"...setting anchor distance {self.anchor_distance}.\n")
+            print(f"...setting ATR period {self.atr}\n")
         except KeyError:
             print("Error: incorrect entry in monitor_conditions. Exiting.")
+            exit()
 
         self.debug = yaml_inputs.get("debug")
         if self.debug:
+            print("Loading debug YAML options.")
             self.output_data = self.debug["output_data"]
+            print(f"...output_data file location {self.output_data}")
+            self.test_mode = self.debug.get("test_mode", False)
+            print(f"...test_mode {self.test_mode}")
+            self.test_data = self.debug.get("test_data", None)
+            print(f"...loading test data: {self.test_data}\n")
+            self.bootstrap_data = self.debug.get("bootstrap_data", None)
+            print(f"...loading bootstrap data: {self.bootstrap_data}")
+            if self.bootstrap_data:
+                try:
+                    self.bootstrap_sample_size = self.debug["bootstrap_sample_size"]
+                    print(f"...size of bootstrap sample: {self.bootstrap_sample_size}")
+                    self.bootstrap_number_samples = self.debug["bootstrap_number_samples"]
+                    print(f"...bootstrap number of samples: {self.bootstrap_number_samples}")
+                except KeyError:
+                    print("Error: incorrect entries for bootstrap variables. Exiting")
+                    exit()
+
+    def prep_bootstrap(self):
+        self.ema_short = [9, 12, 14]
+        self.ema_medium = [16, 18, 21]
+        self.ema_long = [100, 150]
+
+        self.rsi = [9, 12, 14]
+        #self.rsi_top = [70]
+        #self.rsi_bottom = [50]
+
+        #self.vwap = [9, 12, 14]
+        self.atr = [9, 12, 14]
+
+

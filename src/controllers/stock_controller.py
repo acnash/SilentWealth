@@ -11,6 +11,10 @@ class StockController(Controller):
     NYSE_END_TIME = "20:30"
     NYSE_CLOSE_TIME = "20:58"
 
+    LSE_START_TIME = "08:10"
+    LSE_END_TIME = "16:00"
+    LSE_CLOSE_TIME = "16:10"
+
     def __init__(self, silent_wealth_inputs):
         super().__init__()
         self.silent_wealth_inputs = silent_wealth_inputs
@@ -19,6 +23,7 @@ class StockController(Controller):
         self.ticker_name = self.silent_wealth_inputs.ticker_name
         self.exchange = self.silent_wealth_inputs.exchange
         self.frame_size = self.silent_wealth_inputs.frame_size
+        self.unit_type = self.silent_wealth_inputs.unit_type
         self.quantity = self.silent_wealth_inputs.quantity
         self.purchase_type = self.silent_wealth_inputs.purchase_type
         self.stop_loss = self.silent_wealth_inputs.stop_loss
@@ -28,7 +33,6 @@ class StockController(Controller):
         self.ema_long = self.silent_wealth_inputs.ema_long
         self.vwap = self.silent_wealth_inputs.vwap
         self.rsi_period = self.silent_wealth_inputs.rsi_period
-        self.anchor_distance = self.silent_wealth_inputs.anchor_distance
         self.output_data = self.silent_wealth_inputs.output_data
 
         if self.silent_wealth_inputs.exchange == "LSE":
