@@ -21,21 +21,13 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # CLI
 # -------------------------
 def parse_args():
-    p = argparse.ArgumentParser(
-        description="Predict next-day Close for one trained combo using its artifacts."
-    )
-    p.add_argument("--data_file", required=True,
-                   help="Path to the raw <COMBO>_PRICES.txt used for that training run.")
-    p.add_argument("--artifacts_root", default="artifacts",
-                   help="Root directory containing run artifacts (default: artifacts).")
-    p.add_argument("--out_subdir", default="inference",
-                   help="Subdirectory under the run artifacts to write predictions (default: inference).")
-    p.add_argument("--plots_last_n", type=int, default=30,
-                   help="Show only the last N target days in per-ticker plots (default: 30).")
-    p.add_argument("--seq_len", type=int, default=None,
-                   help="Override seq_len for inference (defaults to the saved best seq_len).")
-    p.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto",
-                   help="Inference device (default auto).")
+    p = argparse.ArgumentParser(description="Predict next-day Close for one trained combo using its artifacts.")
+    p.add_argument("--data_file", required=True, help="Path to the raw <COMBO>_PRICES.txt used for that training run.")
+    p.add_argument("--artifacts_root", default="artifacts", help="Root directory containing run artifacts (default: artifacts).")
+    p.add_argument("--out_subdir", default="inference", help="Subdirectory under the run artifacts to write predictions (default: inference).")
+    p.add_argument("--plots_last_n", type=int, default=30, help="Show only the last N target days in per-ticker plots (default: 30).")
+    p.add_argument("--seq_len", type=int, default=None, help="Override seq_len for inference (defaults to the saved best seq_len).")
+    p.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto", help="Inference device (default auto).")
     return p.parse_args()
 
 # -------------------------
@@ -60,23 +52,18 @@ class CausalConv1d(nn.Module):
     def __init__(self, channels: int, kernel_size: int):
         super().__init__()
         self.pad = kernel_size - 1
-        self.conv = nn.Conv1d(channels, channels, kernel_size=kernel_size, padding=0,
-                              groups=channels, bias=True)
+        self.conv = nn.Conv1d(channels, channels, kernel_size=kernel_size, padding=0, groups=channels, bias=True)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (B, T, C)
-        x = x.transpose(1, 2)                      # (B, C, T)
-        x = nn.functional.pad(x, (self.pad, 0))    # causal padding on the left
-        x = self.conv(x)                            # depthwise causal conv
-        return x.transpose(1, 2)                    # back to (B, T, C)
+        x = x.transpose(1, 2)
+        x = nn.functional.pad(x, (self.pad, 0))
+        x = self.conv(x)
+        return x.transpose(1, 2)
 
 class ProjectionBlock(nn.Module):
     def __init__(self, d: int, proj_size: int):
         super().__init__()
         hidden = max(1, d // proj_size)
-        self.net = nn.Sequential(
-            nn.Linear(d, hidden), nn.GELU(),
-            nn.Linear(hidden, d)
-        )
+        self.net = nn.Sequential(nn.Linear(d, hidden), nn.GELU(), nn.Linear(hidden, d))
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
@@ -84,10 +71,7 @@ class FeedForward(nn.Module):
     def __init__(self, d: int, factor: float):
         super().__init__()
         hidden = max(1, int(math.ceil(d * factor)))
-        self.net = nn.Sequential(
-            nn.Linear(d, hidden), nn.GELU(),
-            nn.Linear(hidden, d)
-        )
+        self.net = nn.Sequential(nn.Linear(d, hidden), nn.GELU(), nn.Linear(hidden, d))
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)
 
@@ -136,40 +120,32 @@ class xLSTM_TS_Flexible(nn.Module):
     Flexible head that reconstructs the exact architecture used in training
     based on saved hyperparameters: embed_dim, num_layers, arch_style.
     """
-    def __init__(self, input_size: int, d_model: int, output_size: int,
-                 num_layers: int = 3, arch_style: str = "alternating_ms"):
+    def __init__(self, input_size: int, d_model: int, output_size: int, num_layers: int = 3, arch_style: str = "alternating_ms"):
         super().__init__()
         self.embed = nn.Linear(input_size, d_model)
-
         blocks = []
         def make_block(kind: str):
             if kind == "m":
                 return mLSTMBlock(d_model, MLSTM_CONV_K, MLSTM_HEADS, MLSTM_PROJ_SIZE)
             else:
                 return sLSTMBlock(d_model, SLSTM_CONV_K, SLSTM_HEADS, SLSTM_FF_FACTOR)
-
-        # Build sequence of blocks
         style = (arch_style or "alternating_ms").lower()
         if style in ("all_m", "m_only"):
             blocks = [make_block("m") for _ in range(num_layers)]
         elif style in ("all_s", "s_only"):
             blocks = [make_block("s") for _ in range(num_layers)]
-        elif style in ("msm", "sms"):  # explicit 3-layer patterns, fall back if num_layers!=3
+        elif style in ("msm", "sms"):
             pattern = list(style)
             if num_layers != len(pattern):
-                # repeat pattern to num_layers
                 pat = (pattern * ((num_layers + len(pattern) - 1) // len(pattern)))[:num_layers]
             else:
                 pat = pattern
             blocks = [make_block(ch) for ch in pat]
         else:
-            # default alternating starting with m
             pat = [("m" if i % 2 == 0 else "s") for i in range(num_layers)]
             blocks = [make_block(ch) for ch in pat]
-
         self.blocks = nn.ModuleList(blocks)
         self.head = nn.Sequential(nn.LayerNorm(d_model), nn.Linear(d_model, output_size))
-
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.embed(x)
         for b in self.blocks:
@@ -191,7 +167,6 @@ def load_json(path: str) -> dict:
 
 def load_hparams(hp_path: str) -> dict:
     hp_all = load_json(hp_path)
-    # training saved {"best_params": {...}, ...}; fall back if needed
     return hp_all.get("best_params", hp_all)
 
 def scale_minmax(x: np.ndarray, vmin: float, vmax: float, eps: float = 1e-12) -> np.ndarray:
@@ -225,16 +200,18 @@ def predict_batches(model: nn.Module, X: np.ndarray, device: str, batch_size: in
         out.append(yp)
     return np.concatenate(out, axis=0) if out else np.array([])
 
-def compute_direction_markers(raw_close_all: np.ndarray, target_indices: np.ndarray,
-                              y_true: np.ndarray, y_pred: np.ndarray):
+def compute_direction_markers(raw_close_all: np.ndarray, target_indices: np.ndarray, y_true: np.ndarray, y_pred: np.ndarray):
     """
-    Marks whether the predicted next-day direction matches the actual direction.
+    True/Pred direction are computed relative to the previous ACTUAL close.
+    Returns boolean arrays marking prediction-direction correctness per target.
     """
     assert len(target_indices) == len(y_true) == len(y_pred)
     dirs_true, dirs_pred = [], []
     for k, t in enumerate(target_indices):
         if t - 1 < 0:
-            dirs_true.append(0); dirs_pred.append(0); continue
+            dirs_true.append(0)
+            dirs_pred.append(0)
+            continue
         prev = raw_close_all[t - 1]
         delta_t = raw_close_all[t] - prev
         delta_p = y_pred[k] - prev
@@ -265,15 +242,15 @@ def main():
     print(f"[run_id={run_id}] Using device: {DEVICE}")
 
     # resolve file paths inside this run's artifacts
-    split_report_path   = os.path.join(artifact_dir, "split_report.csv")
+    split_report_path = os.path.join(artifact_dir, "split_report.csv")
     scaling_params_path = os.path.join(artifact_dir, "scaling_params.csv")
-    hparams_path        = os.path.join(artifact_dir, f"xlstm_ts_best_hparams_{run_id}.json")
-    model_state_path    = os.path.join(artifact_dir, f"xlstm_ts_best_state_dict_{run_id}.pt")
+    hparams_path = os.path.join(artifact_dir, f"xlstm_ts_best_hparams_{run_id}.json")
+    model_state_path = os.path.join(artifact_dir, f"xlstm_ts_best_state_dict_{run_id}.pt")
 
     # out dirs
-    out_dir   = os.path.join(artifact_dir, args.out_subdir)
+    out_dir = os.path.join(artifact_dir, args.out_subdir)
     plots_dir = os.path.join(out_dir, "plots")
-    csv_dir   = os.path.join(out_dir, "per_ticker_csv")
+    csv_dir = os.path.join(out_dir, "per_ticker_csv")
     os.makedirs(plots_dir, exist_ok=True)
     os.makedirs(csv_dir, exist_ok=True)
 
@@ -281,15 +258,12 @@ def main():
     if not os.path.exists(hparams_path):
         raise FileNotFoundError(f"Missing hparams: {hparams_path}")
     hp = load_hparams(hparams_path)
-    embed_dim  = int(hp.get("embed_dim", 64))
+    embed_dim = int(hp.get("embed_dim", 64))
     num_layers = int(hp.get("num_layers", 3))
     arch_style = str(hp.get("arch_style", "alternating_ms"))
-    seq_len    = int(args.seq_len) if args.seq_len is not None else int(hp.get("seq_len", 100))
+    seq_len = int(args.seq_len) if args.seq_len is not None else int(hp.get("seq_len", 100))
 
-    model = xLSTM_TS_Flexible(
-        input_size=1, d_model=embed_dim, output_size=1,
-        num_layers=num_layers, arch_style=arch_style
-    ).to(DEVICE)
+    model = xLSTM_TS_Flexible(input_size=1, d_model=embed_dim, output_size=1, num_layers=num_layers, arch_style=arch_style).to(DEVICE)
 
     if not os.path.exists(model_state_path):
         raise FileNotFoundError(f"Missing model state: {model_state_path}")
@@ -308,10 +282,7 @@ def main():
 
     if not os.path.exists(split_report_path):
         raise FileNotFoundError(f"Missing split report: {split_report_path}")
-    sr = pd.read_csv(
-        split_report_path,
-        parse_dates=["train_start", "train_end", "val_start", "val_end", "test_start", "test_end"]
-    )
+    sr = pd.read_csv(split_report_path, parse_dates=["train_start", "train_end", "val_start", "val_end", "test_start", "test_end"])
     req_sr = {"Ticker", "test_start", "test_end"}
     if not req_sr.issubset(sr.columns):
         raise ValueError(f"{os.path.basename(split_report_path)} must contain columns: {sorted(req_sr)}")
@@ -340,8 +311,7 @@ def main():
 
     df_test = pd.concat(pieces, ignore_index=True) if pieces else df.iloc[0:0]
     if df_test.empty:
-        raise RuntimeError("No rows found in raw data for the saved test windows. "
-                           "Check ticker names and artifacts/split_report.csv for this run.")
+        raise RuntimeError("No rows found in raw data for the saved test windows. Check ticker names and artifacts/split_report.csv for this run.")
 
     df_test = df_test[[DATE_COL, tkr_col, TARGET_COL]].copy().sort_values([tkr_col, DATE_COL])
 
@@ -382,44 +352,72 @@ def main():
         target_dates = pd.to_datetime(dates[idxs])
 
         # Save per-ticker CSV
-        out_df = pd.DataFrame({
-            "Date": target_dates,
-            "Ticker": tkr,
-            "y_true_close": y_true,
-            "y_pred_close": y_pred
-        }).sort_values("Date")
+        out_df = pd.DataFrame({"Date": target_dates, "Ticker": tkr, "y_true_close": y_true, "y_pred_close": y_pred}).sort_values("Date")
         out_csv = os.path.join(csv_dir, f"{tkr}_predictions_seq{seq_len}.csv")
         out_df.to_csv(out_csv, index=False)
 
         # Direction markers vs previous actual close
-        correct_mask, wrong_mask = compute_direction_markers(
-            raw_close_all=raw_close, target_indices=idxs, y_true=y_true, y_pred=y_pred
-        )
+        correct_mask, wrong_mask = compute_direction_markers(raw_close_all=raw_close, target_indices=idxs, y_true=y_true, y_pred=y_pred)
 
         # Plot only the last N targets
         n_total = len(out_df)
         n_plot = min(max(1, int(args.plots_last_n)), n_total)
         df_plot = out_df.tail(n_plot).copy()
+        # align direction masks to the last N targets
         correct_last = correct_mask[-n_plot:]
-        wrong_last   = wrong_mask[-n_plot:]
+        # wrong_last = wrong_mask[-n_plot:]  # not plotted per requirements
 
         x_dates = df_plot["Date"].values
         y_actual = df_plot["y_true_close"].values
         y_predpl = df_plot["y_pred_close"].values
 
         plt.figure(figsize=(10, 4))
-        plt.plot(x_dates, y_actual, label="Actual")
-        plt.plot(x_dates, y_predpl, label="Predicted")
+        # Actual: orange line with small vertical dash at each data point
+        plt.plot(
+            x_dates,
+            y_actual,
+            label="Actual Close",
+            linewidth=2,
+            color="orange",
+            marker="|",
+            markersize=8,
+            markeredgewidth=1.5,
+            zorder=2
+        )
+        # Predicted: POINTS ONLY (no lines)
+        plt.scatter(x_dates, y_predpl, label="Predicted Close", s=28, zorder=3)
+
+        # Faint dotted connectors from previous ACTUAL to current PREDICTED (skip the first)
+        if len(x_dates) > 1:
+            for i in range(1, len(x_dates)):
+                plt.plot(
+                    [x_dates[i - 1], x_dates[i]],
+                    [y_actual[i - 1], y_predpl[i]],
+                    linestyle=":",
+                    linewidth=1.0,
+                    alpha=0.5
+                )
+
+        # Green tick on predicted points when direction matches actual vs previous ACTUAL close
         if np.any(correct_last):
-            plt.scatter(x_dates[correct_last], y_actual[correct_last], marker='o', color='green', s=36,
-                        label="Correct direction")
-        if np.any(wrong_last):
-            plt.scatter(x_dates[wrong_last], y_actual[wrong_last], marker='x', color='red', s=48,
-                        label="Wrong direction")
+            plt.scatter(
+                x_dates[correct_last],
+                y_predpl[correct_last],
+                marker=r'$\checkmark$',
+                s=140,
+                color='green',
+                linewidths=0.0,
+                label="Correct direction"
+            )
+
         plt.title(f"{tkr} — Next-Day Close (seq_len={seq_len}) — Last {n_plot} days")
-        plt.xlabel("Date"); plt.ylabel("Price"); plt.legend(); plt.tight_layout()
+        plt.xlabel("Date")
+        plt.ylabel("Price")
+        plt.legend()
+        plt.tight_layout()
         out_png = os.path.join(plots_dir, f"{tkr}_actual_vs_pred_seq{seq_len}_last{n_plot}.png")
-        plt.savefig(out_png, dpi=160); plt.close()
+        plt.savefig(out_png, dpi=160)
+        plt.close()
 
         all_dfs.append(out_df)
 
@@ -427,7 +425,6 @@ def main():
     if all_dfs:
         combo = pd.concat(all_dfs, ignore_index=True).sort_values(["Ticker", "Date"])
         combo.to_csv(os.path.join(out_dir, f"all_tickers_predictions_seq{seq_len}.csv"), index=False)
-
         rows = []
         for tkr in combo["Ticker"].unique():
             c = combo[combo["Ticker"] == tkr]
@@ -436,9 +433,7 @@ def main():
             mae = float(np.mean(np.abs(p - y)))
             rmse = float(np.sqrt(np.mean((p - y) ** 2)))
             rows.append({"Ticker": tkr, "N": len(c), "MAE": mae, "RMSE": rmse})
-        pd.DataFrame(rows).to_csv(
-            os.path.join(out_dir, f"summary_metrics_by_ticker_seq{seq_len}.csv"), index=False
-        )
+        pd.DataFrame(rows).to_csv(os.path.join(out_dir, f"summary_metrics_by_ticker_seq{seq_len}.csv"), index=False)
 
     print("\nInference complete.")
     print(f"Run artifacts:        {artifact_dir}")
