@@ -9,15 +9,31 @@ import time, random
 from datetime import datetime, timedelta
 from itertools import combinations
 import pandas as pd
+import urllib.parse
 
-TICKERS = ["GOOGL","MSFT","JNJ","PG","KO","VZ","PEP","WMT","PFE"]
+#TICKERS = ["GOOGL","MSFT","JNJ","PG","KO","VZ","PEP","WMT","PFE"]
+TICKERS = ["%5Espx"]   # literal URL-encoded ^SPX
+
 
 BASE_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
-MIN_YEARS = 8                 # keep only the last N years
+MIN_YEARS = 10                 # keep only the last N years
 SLEEP_BETWEEN_REQUESTS = (0.5, 1.0)  # seconds (min, max) jitter
 
 def stooq_symbol(ticker: str) -> str:
-    return f"{ticker.lower()}.us"
+    t = ticker.strip()
+    # If user already provided an encoded symbol like "%5Espx", trust it
+    if "%" in t:
+        return t.lower()
+    # If user provided caret form like "^SPX", encode it
+    if t.startswith("^"):
+        return urllib.parse.quote(t.lower(), safe='')
+    # Preserve dotted symbols like 'googl.us'
+    if "." in t:
+        return t.lower()
+    # Default: assume US equity
+    return f"{t.lower()}.us"
+
+    #return f"{ticker.lower()}.us"
 
 def fetch_one(symbol: str, max_retries: int = 5) -> pd.DataFrame:
     attempt = 0
@@ -25,6 +41,9 @@ def fetch_one(symbol: str, max_retries: int = 5) -> pd.DataFrame:
     while True:
         attempt += 1
         try:
+
+            print("DEBUG: fetching url =", BASE_URL.format(symbol=symbol))
+
             df = pd.read_csv(url)
             if df is None or df.empty:
                 raise RuntimeError("Stooq returned no data.")
@@ -65,6 +84,7 @@ def save_combo(df_map: dict, combo: tuple) -> int:
     combo_id = "_".join(combo)  # safe filename component
     outfile = f"{combo_id}_PRICES.txt"
     all_df.to_csv(outfile, sep="\t", index=False)
+    print(f"{outfile}")
     return len(all_df)
 
 def main() -> None:
