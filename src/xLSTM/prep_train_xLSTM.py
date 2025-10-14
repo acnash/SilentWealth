@@ -230,14 +230,15 @@ def build_windows_target_only(series: pd.Series, window: int, horizon: int=1) ->
     Build sliding windows over a single univariate series.
     Returns:
       X: (N, window, 1)
-      y: (N,)
+      y: (N,)  <-- now returns the *residual* target: (future_value - last_input_value)
     """
     vals = series.values.astype("float32")
     X_list, y_list = [], []
     n = len(vals)
     for t in range(window, n - horizon + 1):
         X_list.append(vals[t - window:t])
-        y_list.append(vals[t + horizon - 1])
+        # last input in the window is vals[t-1]; target is vals[t + horizon - 1]
+        y_list.append(vals[t + horizon - 1] - vals[t - 1])
     X = np.stack(X_list, axis=0).astype("float32") if len(X_list) > 0 else np.zeros((0, window), dtype="float32")
     y = np.array(y_list, dtype="float32") if len(y_list) > 0 else np.zeros((0,), dtype="float32")
     X = X[..., None]
@@ -705,8 +706,8 @@ def objective(trial: optuna.Trial) -> float:
 
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=10, verbose=False, min_lr=1e-8)
-    loss_fn = nn.MSELoss()
-    #loss_fn = nn.L1Loss()
+    #loss_fn = nn.MSELoss()
+    loss_fn = nn.L1Loss()
     scaler = make_grad_scaler(AMP_ENABLED)
 
     best_val = float("inf"); best_state = None; epochs_no_improve = 0
@@ -789,25 +790,68 @@ def predict_and_report(model: nn.Module, loader: DataLoader, X: np.ndarray, y: n
       - overall metrics JSON
       - per-ticker metrics CSV
       - predictions CSV
-    Returns a small dict with arrays for plotting.
+
+    Important: `y` coming from the dataset is the *residual* (y_true - last_input).
+    This function reconstructs absolute values for reporting:
+      y_true_abs = y + last_input
+      y_pred_abs = y_pred_res + last_input
     """
-    y_pred, y_true = predict_on_loader(model, loader)
-    if len(y_pred) != len(y_true) or len(y_true) != len(tickers):
-        n = min(len(y_pred), len(y_true), len(tickers))
-        y_pred, y_true, tickers = y_pred[:n], y_true[:n], tickers[:n]
-    y_naive = X[:, -1, 0][:len(y_true)]
-    overall = metrics_dict(y_true, y_pred, y_naive)
+    # model outputs and dataset y are residuals
+    y_pred_res, y_true_res = predict_on_loader(model, loader)
+    if len(y_pred_res) != len(y_true_res) or len(y_true_res) != len(tickers):
+        n = min(len(y_pred_res), len(y_true_res), len(tickers))
+        y_pred_res, y_true_res, tickers = y_pred_res[:n], y_true_res[:n], tickers[:n]
+
+    # reconstruct absolute values using last value from X windows
+    last_vals = X[:, -1, 0][:len(y_true_res)]
+    y_true_abs = y_true_res + last_vals
+    y_pred_abs = y_pred_res + last_vals
+    y_naive = last_vals  # naive prediction is the last value
+
+    # overall metrics are computed on absolute values vs naive
+    overall = metrics_dict(y_true_abs, y_pred_abs, y_naive)
+    # add baseline MSE explicitly for convenience
+    overall["baseline_MSE"] = float(np.mean((y_naive - y_true_abs) ** 2)) if len(y_naive) else float("nan")
+
     with open(os.path.join(CURRENT["artifact_dir"], f"metrics_{out_prefix}_overall.json"), "w") as f:
         json.dump(overall, f, indent=2)
+
+    # per-ticker metrics (absolute)
     rows = []
-    for tkr in sorted(set(tickers.tolist())):
-        idx = (tickers == tkr); m = metrics_dict(y_true[idx], y_pred[idx], y_naive[idx])
-        m_row = {"Ticker": tkr}; m_row.update(m); rows.append(m_row)
+    unique_tkrs = sorted(set(tickers.tolist()))
+    for tkr in unique_tkrs:
+        idx = (tickers == tkr)
+        if idx.sum() == 0: continue
+        m = metrics_dict(y_true_abs[idx], y_pred_abs[idx], y_naive[idx])
+        m_row = {"Ticker": tkr}
+        m_row.update(m)
+        rows.append(m_row)
     by_ticker_df = pd.DataFrame(rows)
     by_ticker_df.to_csv(os.path.join(CURRENT["artifact_dir"], f"metrics_{out_prefix}_by_ticker.csv"), index=False)
-    pred_df = pd.DataFrame({"Ticker": tickers, "y_true": y_true, "y_pred": y_pred, "y_naive": y_naive, "err_model": y_pred - y_true, "err_naive": y_naive - y_true})
+
+    # prediction CSV: include residuals and absolute values and naive
+    pred_df = pd.DataFrame({
+        "Ticker": tickers[:len(y_true_res)],
+        "y_true_abs": y_true_abs,
+        "y_pred_abs": y_pred_abs,
+        "y_pred_res": y_pred_res,
+        "y_true_res": y_true_res,
+        "y_naive": y_naive,
+        "err_model": y_pred_abs - y_true_abs,
+        "err_naive": y_naive - y_true_abs
+    })
     pred_df.to_csv(os.path.join(CURRENT["artifact_dir"], f"predictions_{out_prefix}.csv"), index=False)
-    return {"overall": overall, "by_ticker": by_ticker_df, "y_true": y_true, "y_pred": y_pred, "y_naive": y_naive}
+
+    return {
+        "overall": overall,
+        "by_ticker": by_ticker_df,
+        "y_true_res": y_true_res,
+        "y_pred_res": y_pred_res,
+        "y_true_abs": y_true_abs,
+        "y_pred_abs": y_pred_abs,
+        "y_naive": y_naive
+    }
+
 
 def verdict_from_metrics(test_mse: float, baseline_mse: float) -> str:
     """Make a simple textual verdict vs naive baseline."""
@@ -867,22 +911,24 @@ def train_eval_best(study: optuna.Study) -> Dict[str, Any]:
     ).to(DEVICE)
 
     best_state = best_trial.user_attrs.get("best_state", None)
-    if best_state is not None: model.load_state_dict(best_state, strict=True)
-    loss_fn = nn.MSELoss()
-    #loss_fn = nn.L1Loss()
+    if best_state is not None:
+        model.load_state_dict(best_state, strict=True)
 
-    val_mse  = evaluate_losses(model, val_loader, loss_fn)
-    test_mse = evaluate_losses(model, test_loader, loss_fn)
+    # keep the loss_fn definition (used elsewhere / for consistency)
+    #loss_fn = nn.MSELoss()
+    loss_fn = nn.L1Loss()
 
-    Xva, yva, tva = arrs["Xva"], arrs["yva"], arrs["tva"]
-    Xte, yte, tte = arrs["Xte"], arrs["yte"], arrs["tte"]
-    naive_val = Xva[:, -1, 0] if Xva.shape[0] > 0 else np.array([])
-    naive_test = Xte[:, -1, 0] if Xte.shape[0] > 0 else np.array([])
-    baseline_mse_val = float(np.mean((naive_val - yva) ** 2)) if len(naive_val) else float("nan")
-    baseline_mse_test = float(np.mean((naive_test - yte) ** 2)) if len(naive_test) else float("nan")
+    # --- Replace the old evaluate_losses + manual baseline block with these calls ---
+    # predict_and_report knows the model outputs residuals and reconstructs absolute values
+    val_report = predict_and_report(model, val_loader, arrs["Xva"], arrs["yva"], arrs["tva"], out_prefix="val")
+    test_report = predict_and_report(model, test_loader, arrs["Xte"], arrs["yte"], arrs["tte"], out_prefix="test")
 
-    val_report  = predict_and_report(model, val_loader, Xva, yva, tva, out_prefix="val")
-    test_report = predict_and_report(model, test_loader, Xte, yte, tte, out_prefix="test")
+    # read absolute MSEs (and baseline MSE) from the reports produced above
+    val_mse = float(val_report["overall"].get("MSE", float("nan")))
+    test_mse = float(test_report["overall"].get("MSE", float("nan")))
+
+    baseline_mse_val = float(val_report["overall"].get("baseline_MSE", float("nan")))
+    baseline_mse_test = float(test_report["overall"].get("baseline_MSE", float("nan")))
 
     # Graphs: parity and residuals for val/test
     plot_parity(val_report["y_true"],  val_report["y_pred"],  os.path.join(CURRENT["artifact_dir"], "parity_val.png"),  f"{CURRENT['run_id']} — Parity (Validation)")
