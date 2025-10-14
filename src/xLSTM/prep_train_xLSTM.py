@@ -706,6 +706,7 @@ def objective(trial: optuna.Trial) -> float:
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=WEIGHT_DECAY)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=10, verbose=False, min_lr=1e-8)
     loss_fn = nn.MSELoss()
+    #loss_fn = nn.L1Loss()
     scaler = make_grad_scaler(AMP_ENABLED)
 
     best_val = float("inf"); best_state = None; epochs_no_improve = 0
@@ -868,6 +869,7 @@ def train_eval_best(study: optuna.Study) -> Dict[str, Any]:
     best_state = best_trial.user_attrs.get("best_state", None)
     if best_state is not None: model.load_state_dict(best_state, strict=True)
     loss_fn = nn.MSELoss()
+    #loss_fn = nn.L1Loss()
 
     val_mse  = evaluate_losses(model, val_loader, loss_fn)
     test_mse = evaluate_losses(model, test_loader, loss_fn)
