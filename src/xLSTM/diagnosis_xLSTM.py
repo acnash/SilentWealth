@@ -6,34 +6,35 @@ Load a predictions CSV produced by the training pipeline (predictions_val.csv or
 compute model vs naive baseline metrics, make a small comparison plot, and print human-readable
 conclusions.
 
-Expected CSV columns (exact names used by your pipeline):
-    - "Ticker" (optional)
-    - "y_true"
-    - "y_pred"
-    - "y_naive"
+This version is robust to the two prediction-CSV formats your pipeline might emit:
+  - older format: columns include "y_true", "y_pred", "y_naive"
+  - residual format: columns include combinations of
+        "y_true_res", "y_pred_res", "y_true_abs", "y_pred_abs", "y_naive"
+    In the residual format we reconstruct absolute values as:
+        y_true_abs = y_true_res + y_naive
+        y_pred_abs = y_pred_res + y_naive
 
 Usage:
     python check_predictions_vs_naive.py --pred_csv artifacts/<RUN_ID>/predictions_val.csv
 """
-
+from __future__ import annotations
 import os
 import argparse
 import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from typing import Optional, Tuple, Dict
 
 def safe_corr(a: np.ndarray, b: np.ndarray) -> float:
     """Return Pearson correlation coefficient or nan if not defined."""
     if len(a) < 2:
         return float("nan")
-    # If constant arrays, np.corrcoef will give nan; guard against that.
     if np.allclose(a, a[0]) or np.allclose(b, b[0]):
-        # If both constant and equal, corr = 1.0; else undefined -> nan
         return 1.0 if np.allclose(a, b) else float("nan")
     return float(np.corrcoef(a, b)[0, 1])
 
-def summarize_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_naive: np.ndarray, tol: float=1e-6):
+def summarize_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_naive: np.ndarray, tol: float=1e-6) -> Dict[str, float]:
     """Compute core metrics and simple interpretation flags."""
     n = len(y_true)
     if n == 0:
@@ -54,7 +55,6 @@ def summarize_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_naive: np.ndarra
 
     frac_model_equals_naive = float(np.mean(np.isclose(y_pred, y_naive, atol=tol)))
 
-    # Simple improvement measure
     if math.isfinite(naive_mae) and naive_mae > 0:
         rel_improvement_pct = 100.0 * (naive_mae - model_mae) / naive_mae
     else:
@@ -73,7 +73,7 @@ def summarize_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_naive: np.ndarra
         "rel_improvement_pct": rel_improvement_pct
     }
 
-def print_conclusions(m: dict, tol: float=1e-6):
+def print_conclusions(m: Dict[str, float], tol: float=1e-6) -> None:
     """Print human-friendly conclusions based on metric dictionary m."""
     print("\n=== Summary Metrics ===")
     print(f"Samples: {m['n']}")
@@ -130,7 +130,7 @@ def print_conclusions(m: dict, tol: float=1e-6):
         print("      rather than raw price. This reduces dominance of the last-value baseline and focuses learning on change.")
     print("")  # blank line
 
-def plot_comparison(df: pd.DataFrame, out_path: str, n_points: int = 300):
+def plot_comparison(df: pd.DataFrame, out_path: str, n_points: int = 300) -> Optional[str]:
     """Plot first n_points of y_true, y_pred, y_naive and save to out_path."""
     n = min(n_points, len(df))
     if n == 0:
@@ -173,13 +173,12 @@ def per_ticker_summary(df: pd.DataFrame, top_k: int = 5):
     worst = df_t.tail(top_k).sort_values("rel_imp_pct")
     return best, worst, df_t
 
-def find_default_pred_file():
+def find_default_pred_file() -> Optional[str]:
     """Try common defaults (val then test) in 'artifacts/*' if user didn't supply path."""
-    # Try to find a predictions_val.csv or predictions_test.csv under artifacts/* directories.
-    if os.path.exists("predictions_val.csv"):
-        return "predictions_val.csv"
-    if os.path.exists("predictions_test.csv"):
-        return "predictions_test.csv"
+    # Try local files first
+    for fname in ("predictions_val.csv", "predictions_test.csv"):
+        if os.path.exists(fname):
+            return fname
     if not os.path.isdir("artifacts"):
         return None
     # Walk artifacts
@@ -190,6 +189,73 @@ def find_default_pred_file():
         if "predictions_test.csv" in files:
             return os.path.join(root, "predictions_test.csv")
     return None
+
+def load_and_normalize_preds(path: str) -> Tuple[pd.DataFrame, str]:
+    """
+    Load the CSV and return a DataFrame normalized to columns:
+       - "y_true" (absolute)
+       - "y_pred" (absolute)
+       - "y_naive" (absolute)
+    Returns (df_norm, notes) where notes is a short string explaining what transformations were done.
+    Raises ValueError if required columns cannot be constructed.
+    """
+    df = pd.read_csv(path)
+    notes = []
+    # If already contains canonical names, use them
+    if {"y_true","y_pred","y_naive"}.issubset(df.columns):
+        notes.append("Using existing columns: y_true, y_pred, y_naive")
+        df_norm = df.copy()
+        # Ensure numeric
+        df_norm = df_norm.replace([np.inf, -np.inf], np.nan)
+        return df_norm, "; ".join(notes)
+
+    # If absolute names exist from new pipeline
+    if "y_true_abs" in df.columns or "y_pred_abs" in df.columns:
+        # y_naive must exist to be meaningful (it's the last input)
+        if "y_naive" not in df.columns:
+            raise ValueError("CSV contains y_true_abs/y_pred_abs but missing y_naive; cannot normalize.")
+        notes.append("Found y_true_abs/y_pred_abs + y_naive; mapping to canonical columns.")
+        y_true = df["y_true_abs"].to_numpy() if "y_true_abs" in df.columns else None
+        y_pred = df["y_pred_abs"].to_numpy() if "y_pred_abs" in df.columns else None
+        y_naive = df["y_naive"].to_numpy()
+        df_norm = df.copy()
+        if y_true is not None:
+            df_norm["y_true"] = y_true
+        if y_pred is not None:
+            df_norm["y_pred"] = y_pred
+        df_norm["y_naive"] = y_naive
+        return df_norm, "; ".join(notes)
+
+    # If residual format present: y_true_res/y_pred_res and y_naive present -> reconstruct
+    if ("y_true_res" in df.columns or "y_pred_res" in df.columns) and "y_naive" in df.columns:
+        notes.append("Found residual columns (y_*_res) + y_naive; reconstructing absolute values.")
+        y_naive = df["y_naive"].to_numpy()
+        # broadcast/align shapes carefully (if y_naive is length N it's fine)
+        df_norm = df.copy()
+        if "y_true_res" in df.columns:
+            df_norm["y_true"] = df["y_true_res"].to_numpy() + y_naive
+        if "y_pred_res" in df.columns:
+            df_norm["y_pred"] = df["y_pred_res"].to_numpy() + y_naive
+        df_norm["y_naive"] = y_naive
+        return df_norm, "; ".join(notes)
+
+    # Another fallback: if the file uses y_true_abs and only y_pred_res, we can reconstruct y_pred_abs:
+    if "y_true_abs" in df.columns and "y_pred_res" in df.columns and "y_naive" in df.columns:
+        notes.append("Mixed columns: reconstructing y_pred_abs from y_pred_res + y_naive; using existing y_true_abs.")
+        df_norm = df.copy()
+        df_norm["y_true"] = df["y_true_abs"]
+        df_norm["y_pred"] = df["y_pred_res"].to_numpy() + df["y_naive"].to_numpy()
+        df_norm["y_naive"] = df["y_naive"]
+        return df_norm, "; ".join(notes)
+
+    # If none of the above match, fail with helpful message
+    raise ValueError(
+        "Could not find required columns in CSV. Expected either:\n"
+        "  - y_true, y_pred, y_naive  (old format)\n"
+        "  - y_true_abs / y_pred_abs and y_naive  (absolute new format)\n"
+        "  - y_true_res / y_pred_res and y_naive  (residual new format, reconstructable)\n"
+        f"Available columns: {list(df.columns)}"
+    )
 
 def main():
     p = argparse.ArgumentParser(description="Check model predictions vs naive baseline and print conclusions.")
@@ -211,43 +277,59 @@ def main():
         print(f"Predictions file not found: {pred_csv}")
         return
 
-    df = pd.read_csv(pred_csv)
-    # Ensure required columns exist
-    required = {"y_true","y_pred","y_naive"}
-    if not required.issubset(set(df.columns)):
-        print(f"Required columns {required} not found in {pred_csv}. Available columns: {list(df.columns)}")
+    try:
+        df_norm, notes = load_and_normalize_preds(pred_csv)
+    except ValueError as e:
+        print(f"Error loading predictions CSV: {e}")
         return
 
-    # Drop rows with NaNs in the core columns
-    df = df.dropna(subset=["y_true","y_pred","y_naive"]).reset_index(drop=True)
-    if len(df) == 0:
+    print(f"Loaded predictions from: {pred_csv}")
+    print("Normalization notes:", notes)
+
+    # Drop rows with NaNs in the core canonical columns
+    required = {"y_true","y_pred","y_naive"}
+    missing = required - set(df_norm.columns)
+    if missing:
+        print(f"After normalization, required columns missing: {missing}")
+        return
+
+    df_norm = df_norm.replace([np.inf, -np.inf], np.nan)
+    df_norm = df_norm.dropna(subset=["y_true","y_pred","y_naive"]).reset_index(drop=True)
+    if len(df_norm) == 0:
         print("No valid rows remaining after dropping NaNs.")
         return
 
-    y_true = df["y_true"].to_numpy(dtype=float)
-    y_pred = df["y_pred"].to_numpy(dtype=float)
-    y_naive = df["y_naive"].to_numpy(dtype=float)
+    # Print a tiny header sample for sanity
+    print("\nFirst 5 rows (sanity check):")
+    print(df_norm[["y_true","y_pred","y_naive"]].head().to_string(index=False, float_format="%.6f"))
+
+    y_true = df_norm["y_true"].to_numpy(dtype=float)
+    y_pred = df_norm["y_pred"].to_numpy(dtype=float)
+    y_naive = df_norm["y_naive"].to_numpy(dtype=float)
 
     metrics = summarize_metrics(y_true, y_pred, y_naive, tol=args.tol)
     print_conclusions(metrics, tol=args.tol)
 
     # Save comparison plot
     out_plot = os.path.join(os.path.dirname(pred_csv) or ".", "comparison_first_samples.png")
-    saved = plot_comparison(df, out_plot, n_points=args.plot_n)
+    # for plotting we need canonical columns in the df
+    plot_df = df_norm.copy()
+    # rename to ensure plot_comparison finds the columns
+    plot_df = plot_df.rename(columns={"y_true":"y_true","y_pred":"y_pred","y_naive":"y_naive"})
+    saved = plot_comparison(plot_df, out_plot, n_points=args.plot_n)
     if saved:
         print(f"Comparison plot saved to: {saved}")
     else:
         print("Not enough points to plot comparison.")
 
     # Per-ticker summary if available
-    per = per_ticker_summary(df, top_k=5)
+    per = per_ticker_summary(df_norm, top_k=5)
     if per is not None:
         best, worst, df_t = per
         print("\nTop 5 tickers where model improved most vs naive (percent):")
         print(best[["Ticker","model_mae","naive_mae","rel_imp_pct"]].to_string(index=False, float_format='%.3f'))
         print("\nTop 5 tickers where model did WORST vs naive (most negative improvement):")
         print(worst[["Ticker","model_mae","naive_mae","rel_imp_pct"]].to_string(index=False, float_format='%.3f'))
-        # Optionally save the per-ticker table
         per_path = os.path.join(os.path.dirname(pred_csv) or ".", "per_ticker_mae_summary.csv")
         df_t.to_csv(per_path, index=False)
         print(f"\nPer-ticker MAE table saved to: {per_path}")

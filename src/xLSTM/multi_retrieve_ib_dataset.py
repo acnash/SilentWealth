@@ -11,8 +11,9 @@ from itertools import combinations
 import pandas as pd
 import urllib.parse
 
-#TICKERS = ["GOOGL","MSFT","JNJ","PG","KO","VZ","PEP","WMT","PFE"]
-TICKERS = ["%5Espx"]   # literal URL-encoded ^SPX
+#TICKERS = ["QBTS"] #,"MSFT","JNJ","PG","KO","VZ","PEP","WMT","PFE"]
+#TICKERS = ["%5Espx"]   # literal URL-encoded ^SPX S&P 500
+TICKERS = ["%5Endx"] # NASDAQ 100
 
 
 BASE_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"

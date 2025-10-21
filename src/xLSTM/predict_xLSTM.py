@@ -1,6 +1,6 @@
 # predict_xlstmts_from_combo.py
 # End-to-end inference for one trained run (derived from <COMBO>_PRICES.txt).
-# Loads artifacts from artifacts/<run_id>/, runs next-day predictions on the TEST
+# Loads artifacts from artifacts/<run_id>/, runs horizon-day predictions on the TEST
 # window per ticker, and saves per-ticker CSVs and "last N days" plots with direction markers.
 
 import os, json, math, argparse, warnings
@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # CLI
 # -------------------------
 def parse_args():
-    p = argparse.ArgumentParser(description="Predict next-day Close for one trained combo using its artifacts.")
+    p = argparse.ArgumentParser(description="Predict horizon-day Close for one trained combo using its artifacts.")
     p.add_argument("--data_file", required=True, help="Path to the raw <COMBO>_PRICES.txt used for that training run.")
     p.add_argument("--artifacts_root", default="artifacts", help="Root directory containing run artifacts (default: artifacts).")
     p.add_argument("--out_subdir", default="inference", help="Subdirectory under the run artifacts to write predictions (default: inference).")
@@ -177,12 +177,26 @@ def inverse_minmax(x_s: np.ndarray, vmin: float, vmax: float) -> np.ndarray:
     return x_s * (vmax - vmin) + vmin
 
 def build_windows_target_only(s: np.ndarray, window: int, horizon: int = 1):
+    """
+    Build sliding windows for inference.
+
+    Returns:
+      X: (N, window, 1) scaled last-window inputs
+      y_res: (N,) scaled residual targets = scaled_target - last_input_scaled
+      idx_arr: (N,) target indices in the original series (index of the target day)
+    Notes:
+      - last input in the window is at index t-1
+      - target index = t + horizon - 1
+    """
     X_list, y_list, idx_list = [], [], []
     n = len(s)
     for t in range(window, n - horizon + 1):
+        target_idx = t + horizon - 1
+        last_input_idx = t - 1
         X_list.append(s[t - window:t])
-        y_list.append(s[t + horizon - 1])
-        idx_list.append(t)
+        y_res = s[target_idx] - s[last_input_idx]
+        y_list.append(y_res)
+        idx_list.append(target_idx)
     if not X_list:
         return np.zeros((0, window, 1), dtype="float32"), np.zeros((0,), dtype="float32"), np.array([], dtype=int)
     X = np.stack(X_list, axis=0).astype("float32")[..., None]
@@ -204,6 +218,9 @@ def compute_direction_markers(raw_close_all: np.ndarray, target_indices: np.ndar
     """
     True/Pred direction are computed relative to the previous ACTUAL close.
     Returns boolean arrays marking prediction-direction correctness per target.
+
+    NOTE: 'target_indices' must be indices of the target day in raw_close_all.
+    We use raw_close_all[target_idx - 1] as the "previous actual close" (same as training-time RSI baseline).
     """
     assert len(target_indices) == len(y_true) == len(y_pred)
     dirs_true, dirs_pred = [], []
@@ -212,7 +229,7 @@ def compute_direction_markers(raw_close_all: np.ndarray, target_indices: np.ndar
             dirs_true.append(0)
             dirs_pred.append(0)
             continue
-        prev = raw_close_all[t - 1]
+        prev = raw_close_all[t - 1]  # day-before-target actual close (unchanged semantics)
         delta_t = raw_close_all[t] - prev
         delta_p = y_pred[k] - prev
         sgn = lambda x: (-1 if x < 0 else (1 if x > 0 else 0))
@@ -246,6 +263,7 @@ def main():
     scaling_params_path = os.path.join(artifact_dir, "scaling_params.csv")
     hparams_path = os.path.join(artifact_dir, f"xlstm_ts_best_hparams_{run_id}.json")
     model_state_path = os.path.join(artifact_dir, f"xlstm_ts_best_state_dict_{run_id}.pt")
+    data_config_path = os.path.join(artifact_dir, "data_config.json")
 
     # out dirs
     out_dir = os.path.join(artifact_dir, args.out_subdir)
@@ -253,6 +271,16 @@ def main():
     csv_dir = os.path.join(out_dir, "per_ticker_csv")
     os.makedirs(plots_dir, exist_ok=True)
     os.makedirs(csv_dir, exist_ok=True)
+
+    # load horizon from data_config if available (fallback to 1)
+    horizon = 1
+    if os.path.exists(data_config_path):
+        try:
+            data_conf = load_json(data_config_path)
+            horizon = int(data_conf.get("horizon", horizon))
+        except Exception:
+            print(f"[WARN] Could not read horizon from {data_config_path}; defaulting to 1")
+    print(f"Horizon for inference: {horizon} day(s) ahead")
 
     # ---- load hparams & build model that matches training ----
     if not os.path.exists(hparams_path):
@@ -339,24 +367,30 @@ def main():
         # scale raw test close using TRAIN min/max (to match training-time scaler)
         scaled_close = scale_minmax(raw_close, vmin, vmax)
 
-        # sliding windows over TEST segment
-        X, y_true_scaled, idxs = build_windows_target_only(scaled_close, window=seq_len, horizon=1)
+        # sliding windows over TEST segment — returns residual targets (scaled)
+        X, y_true_res_scaled, idxs = build_windows_target_only(scaled_close, window=seq_len, horizon=horizon)
         if X.shape[0] == 0:
-            print(f"[WARN] Not enough test rows for '{tkr}' (need at least {seq_len + 1}). Skipping.")
+            print(f"[WARN] Not enough test rows for '{tkr}' (need at least {seq_len + horizon}). Skipping.")
             continue
 
-        # predict in scaled space → inverse back to raw prices
-        y_pred_scaled = predict_batches(model, X, DEVICE, batch_size=256)
-        y_pred = inverse_minmax(y_pred_scaled, vmin, vmax)
-        y_true = inverse_minmax(y_true_scaled, vmin, vmax)
+        # predict residuals in scaled space → reconstruct absolute scaled → inverse back to raw prices
+        y_pred_res_scaled = predict_batches(model, X, DEVICE, batch_size=256)
+        # last input scaled values (matching training reconstruction)
+        last_vals_scaled = X[:, -1, 0]
+        y_pred_abs_scaled = y_pred_res_scaled + last_vals_scaled
+        y_true_abs_scaled = y_true_res_scaled + last_vals_scaled
+
+        y_pred = inverse_minmax(y_pred_abs_scaled, vmin, vmax)
+        y_true = inverse_minmax(y_true_abs_scaled, vmin, vmax)
+
         target_dates = pd.to_datetime(dates[idxs])
 
         # Save per-ticker CSV
         out_df = pd.DataFrame({"Date": target_dates, "Ticker": tkr, "y_true_close": y_true, "y_pred_close": y_pred}).sort_values("Date")
-        out_csv = os.path.join(csv_dir, f"{tkr}_predictions_seq{seq_len}.csv")
+        out_csv = os.path.join(csv_dir, f"{tkr}_predictions_seq{seq_len}_h{horizon}.csv")
         out_df.to_csv(out_csv, index=False)
 
-        # Direction markers vs previous actual close
+        # Direction markers vs previous actual close (previous = day-before-target)
         correct_mask, wrong_mask = compute_direction_markers(raw_close_all=raw_close, target_indices=idxs, y_true=y_true, y_pred=y_pred)
 
         # Plot only the last N targets
@@ -365,7 +399,6 @@ def main():
         df_plot = out_df.tail(n_plot).copy()
         # align direction masks to the last N targets
         correct_last = correct_mask[-n_plot:]
-        # wrong_last = wrong_mask[-n_plot:]  # not plotted per requirements
 
         x_dates = df_plot["Date"].values
         y_actual = df_plot["y_true_close"].values
@@ -410,12 +443,12 @@ def main():
                 label="Correct direction"
             )
 
-        plt.title(f"{tkr} — Next-Day Close (seq_len={seq_len}) — Last {n_plot} days")
+        plt.title(f"{tkr} — {horizon}-Day Ahead Close (seq_len={seq_len}) — Last {n_plot} targets")
         plt.xlabel("Date")
         plt.ylabel("Price")
         plt.legend()
         plt.tight_layout()
-        out_png = os.path.join(plots_dir, f"{tkr}_actual_vs_pred_seq{seq_len}_last{n_plot}.png")
+        out_png = os.path.join(plots_dir, f"{tkr}_actual_vs_pred_seq{seq_len}_h{horizon}_last{n_plot}.png")
         plt.savefig(out_png, dpi=160)
         plt.close()
 
@@ -424,7 +457,7 @@ def main():
     # ---- Combined outputs and quick metrics ----
     if all_dfs:
         combo = pd.concat(all_dfs, ignore_index=True).sort_values(["Ticker", "Date"])
-        combo.to_csv(os.path.join(out_dir, f"all_tickers_predictions_seq{seq_len}.csv"), index=False)
+        combo.to_csv(os.path.join(out_dir, f"all_tickers_predictions_seq{seq_len}_h{horizon}.csv"), index=False)
         rows = []
         for tkr in combo["Ticker"].unique():
             c = combo[combo["Ticker"] == tkr]
@@ -433,15 +466,15 @@ def main():
             mae = float(np.mean(np.abs(p - y)))
             rmse = float(np.sqrt(np.mean((p - y) ** 2)))
             rows.append({"Ticker": tkr, "N": len(c), "MAE": mae, "RMSE": rmse})
-        pd.DataFrame(rows).to_csv(os.path.join(out_dir, f"summary_metrics_by_ticker_seq{seq_len}.csv"), index=False)
+        pd.DataFrame(rows).to_csv(os.path.join(out_dir, f"summary_metrics_by_ticker_seq{seq_len}_h{horizon}.csv"), index=False)
 
     print("\nInference complete.")
     print(f"Run artifacts:        {artifact_dir}")
     print(f"Outputs written to:   {out_dir}")
     print(f"Per-ticker CSVs:      {os.path.join(out_dir, 'per_ticker_csv')}")
     print(f"Per-ticker plots:     {os.path.join(out_dir, 'plots')}")
-    print(f"Combined predictions: {os.path.join(out_dir, f'all_tickers_predictions_seq{seq_len}.csv')}")
-    print(f"Summary metrics:      {os.path.join(out_dir, f'summary_metrics_by_ticker_seq{seq_len}.csv')}")
+    print(f"Combined predictions: {os.path.join(out_dir, f'all_tickers_predictions_seq{seq_len}_h{horizon}.csv')}")
+    print(f"Summary metrics:      {os.path.join(out_dir, f'summary_metrics_by_ticker_seq{seq_len}_h{horizon}.csv')}")
 
 if __name__ == "__main__":
     main()
